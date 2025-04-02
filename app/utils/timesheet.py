@@ -84,41 +84,65 @@ def parse_time_format(time_str: str) -> str:
     )
 
 
+# calculate week boundaries for specific monthly basis
+# def get_week_boundaries_from_input(day_dates: list) -> (datetime, datetime):
+#     """
+#     Given a list of datetime objects (from user input), use the earliest date as the base
+#     and compute week boundaries (Monday to Friday). If the computed Monday is before the
+#     month or Friday is after the month of the base date, adjust to the first Monday or last Friday.
+#     """
+#     if not day_dates:
+#         raise ValueError("No day dates provided.")
+    
+#     day_dates = [dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc) for dt in day_dates]
+#     base_date = min(day_dates)
+
+#     # Standard computation: Monday of base_date's week and the following Friday.
+#     computed_monday = base_date - timedelta(days=base_date.weekday())
+#     computed_friday = computed_monday + timedelta(days=4)
+    
+#     # Get the first Monday and last Friday of the base_date's month.
+#     year, month = base_date.year, base_date.month
+#     first_day = datetime(year, month, 1, tzinfo=base_date.tzinfo)
+#     days_to_monday = (0 - first_day.weekday()) % 7  # Monday=0
+#     first_monday = first_day + timedelta(days=days_to_monday)
+    
+#     # Last day of the month.
+#     if month == 12:
+#         next_month = datetime(year + 1, 1, 1, tzinfo=base_date.tzinfo)
+#     else:
+#         next_month = datetime(year, month + 1, 1, tzinfo=base_date.tzinfo)
+#     last_day = next_month - timedelta(days=1)
+#     days_from_friday = (last_day.weekday() - 4) % 7  # Friday=4
+#     last_friday = last_day - timedelta(days=days_from_friday)
+    
+#     week_start = computed_monday if computed_monday.month == base_date.month else first_monday
+#     week_end = computed_friday if computed_friday.month == base_date.month else last_friday
+    
+#     return week_start, week_end
+
 
 def get_week_boundaries_from_input(day_dates: list) -> (datetime, datetime):
     """
-    Given a list of datetime objects (from user input), use the earliest date as the base
-    and compute week boundaries (Monday to Friday). If the computed Monday is before the
-    month or Friday is after the month of the base date, adjust to the first Monday or last Friday.
+    Given a list of datetime objects, compute week boundaries (Monday to Friday) based on the earliest date,
+    allowing the week to span months.
     """
     if not day_dates:
         raise ValueError("No day dates provided.")
+    
+    # Ensure all dates are timezone-aware (UTC)
+    day_dates = [dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc) for dt in day_dates]
+    
+    # Find the earliest date
     base_date = min(day_dates)
-    # Standard computation: Monday of base_date's week and the following Friday.
+    
+    # Compute Monday of the base_date's week
     computed_monday = base_date - timedelta(days=base_date.weekday())
+    
+    # Compute Friday of that week
     computed_friday = computed_monday + timedelta(days=4)
     
-    # Get the first Monday and last Friday of the base_date's month.
-    year, month = base_date.year, base_date.month
-    first_day = datetime(year, month, 1, tzinfo=base_date.tzinfo)
-    days_to_monday = (0 - first_day.weekday()) % 7  # Monday=0
-    first_monday = first_day + timedelta(days=days_to_monday)
-    
-    # Last day of the month.
-    if month == 12:
-        next_month = datetime(year + 1, 1, 1, tzinfo=base_date.tzinfo)
-    else:
-        next_month = datetime(year, month + 1, 1, tzinfo=base_date.tzinfo)
-    last_day = next_month - timedelta(days=1)
-    days_from_friday = (last_day.weekday() - 4) % 7  # Friday=4
-    last_friday = last_day - timedelta(days=days_from_friday)
-    
-    week_start = computed_monday if computed_monday.month == base_date.month else first_monday
-    week_end = computed_friday if computed_friday.month == base_date.month else last_friday
-    
-    return week_start, week_end
-
-
+    return computed_monday, computed_friday
 
 
 def get_first_and_last_weekdays_of_month(base_date: datetime):
@@ -258,3 +282,23 @@ async def handle_image_upload(image_file: Optional[UploadFile]) -> Optional[str]
         logger.info(f"Image saved at: {file_path}")
         return file_path
     return None
+
+
+
+def validate_weekday_dates(entry_dates: list[datetime]):
+    """
+    Validate that none of the provided dates fall on a Saturday or Sunday.
+    Raises an HTTPException if any date is on a weekend.
+    
+    Args:
+        entry_dates (list[datetime]): List of datetime objects representing entry dates.
+    
+    Raises:
+        HTTPException: If a date falls on a Saturday or Sunday, with status code 400 and a descriptive message.
+    """
+    for date in entry_dates:
+        if date.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
+            raise HTTPException(
+                status_code=400,
+                detail=f"Entries for weekends (Saturday and Sunday) are not allowed. Invalid date: {date.strftime('%Y-%m-%d')}"
+            )

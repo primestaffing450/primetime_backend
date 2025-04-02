@@ -23,6 +23,63 @@ from fastapi import HTTPException  # Add this import for error handling
 from app.utils.timesheet import normalize_lunch_timeout, parse_time_format
 
 
+def parse_time_extracted(time_str: str):
+    """
+    Parse a time string in 24-hour format (HH:MM) from the extracted record.
+    """
+    try:
+        return datetime.strptime(time_str, "%H:%M").time()
+    except Exception as e:
+        raise ValueError(f"Error parsing extracted time '{time_str}': {str(e)}")
+
+def parse_stored_time(time_str: str):
+    """
+    Parse a stored time string which may be in 12-hour (with AM/PM) or 24-hour format.
+    """
+    try:
+        # If time string contains AM or PM, use 12-hour parsing.
+        if "AM" in time_str or "PM" in time_str:
+            try:
+                return datetime.strptime(time_str, "%I:%M:%S %p").time()
+            except ValueError:
+                return datetime.strptime(time_str, "%I:%M %p").time()
+        else:
+            return datetime.strptime(time_str, "%H:%M").time()
+    except Exception as e:
+        raise ValueError(f"Error parsing stored time '{time_str}': {str(e)}")
+
+def parse_hours(value) -> float:
+    """
+    Convert a value to a float representing hours.
+    - If value is numeric, return it.
+    - If value is a string containing ":", assume format "H:MM" and convert.
+    - Otherwise, attempt a float conversion.
+    """
+    try:
+        if isinstance(value, (int, float)):
+            return float(value)
+        if isinstance(value, str):
+            if ":" in value:
+                parts = value.split(":")
+                hours = float(parts[0])
+                minutes = float(parts[1])
+                return hours + minutes / 60.0
+            else:
+                return float(value)
+    except Exception as e:
+        raise ValueError(f"Error parsing hours from '{value}': {str(e)}")
+
+def parse_numeric(value) -> float:
+    """
+    Convert a value to float (for lunch_timeout, etc.).
+    """
+    try:
+        return float(value)
+    except Exception:
+        return 0.0
+
+
+
 def get_mismatch_details(record: Dict[str, Any], stored_day: Dict[str, Any]) -> List[str]:
     """
     Compare the record with the stored day and return a list of detail messages
@@ -31,18 +88,21 @@ def get_mismatch_details(record: Dict[str, Any], stored_day: Dict[str, Any]) -> 
     details = []
     try:
         # Convert extracted times (expected in 24-hour format "HH:MM")
-        record_time_in = datetime.strptime(record["time_in"], "%H:%M").time()
-        record_time_out = datetime.strptime(record["time_out"], "%H:%M").time()
+        # record_time_in = datetime.strptime(record["time_in"], "%H:%M").time()
+        # record_time_out = datetime.strptime(record["time_out"], "%H:%M").time()
+
+        record_time_in = parse_time_extracted(record['time_in'])
+        record_time_out = parse_time_extracted(record['time_out'])
         
         # Helper function to parse stored time (supports AM/PM or 24-hour)
-        def parse_stored_time(t: str):
-            if "AM" in t or "PM" in t:
-                try:
-                    return datetime.strptime(t, "%I:%M:%S %p").time()
-                except ValueError:
-                    return datetime.strptime(t, "%I:%M %p").time()
-            else:
-                return datetime.strptime(t, "%H:%M").time()
+        # def parse_stored_time(t: str):
+        #     if "AM" in t or "PM" in t:
+        #         try:
+        #             return datetime.strptime(t, "%I:%M:%S %p").time()
+        #         except ValueError:
+        #             return datetime.strptime(t, "%I:%M %p").time()
+        #     else:
+        #         return datetime.strptime(t, "%H:%M").time()
         
         stored_time_in = (parse_stored_time(stored_day["time_in"])
                           if isinstance(stored_day["time_in"], str)
@@ -56,8 +116,12 @@ def get_mismatch_details(record: Dict[str, Any], stored_day: Dict[str, Any]) -> 
         stored_lunch = normalize_lunch_timeout(str(stored_day.get("lunch_timeout", "0")))
         
         # Compare total_hours with a tolerance
-        record_hours = float(record.get("total_hours", 0))
-        stored_hours = float(stored_day.get("total_hours", 0))
+        # record_hours = float(record.get("total_hours", 0))
+        # stored_hours = float(stored_day.get("total_hours", 0))
+        # hours_match = abs(record_hours - stored_hours) <= 0.01
+
+        record_hours = parse_hours(record.get("total_hours", 0))
+        stored_hours = parse_hours(stored_day.get("total_hours", 0))
         hours_match = abs(record_hours - stored_hours) <= 0.01
         
         # Field-by-field checks
@@ -88,7 +152,7 @@ def compare_with_weekly_report(extracted_data: Dict[str, Any], previous_entries:
        - total_hours: numeric
        
     The extracted_data is expected to have a "records" key whose elements are dicts with:
-       - date (in "YYYY-MM-DD")
+       - date (in "MM-DD-YYYY")
        - time_in (expected in "HH:MM" format)
        - time_out (expected in "HH:MM" format)
        - lunch_timeout (string or numeric)
@@ -151,10 +215,19 @@ def compare_with_weekly_report(extracted_data: Dict[str, Any], previous_entries:
             if not record_date:
                 logger.warning(f"Missing date in record: {record}")
                 continue
+
+            try:
+                dt_record = datetime.strptime(record_date, "%m-%d-%Y")
+                formatted_record_date = dt_record.strftime("%Y-%m-%d")
+            except Exception as e:
+                formatted_record_date = record_date  # fallback
             
             # If the extracted record's date exists in stored_days, compare the times
-            if record_date in stored_days:
-                stored_day = stored_days[record_date]
+            # if record_date in stored_days:
+            #     stored_day = stored_days[record_date]
+            #     details = get_mismatch_details(record, stored_day)
+            if formatted_record_date in stored_days:
+                stored_day = stored_days[formatted_record_date]
                 details = get_mismatch_details(record, stored_day)
                 
                 if details:
@@ -191,7 +264,8 @@ def compare_with_weekly_report(extracted_data: Dict[str, Any], previous_entries:
 
     # CHANGED: For each stored day not present in extracted data, add to stored_missing_entries with details.
     for date_str, day_data in stored_days.items():
-        if date_str not in extracted_dates:
+        # if date_str not in extracted_dates:
+        if date_str not in [datetime.strptime(d, "%m-%d-%Y").strftime("%Y-%m-%d") for d in extracted_dates]:
             comparison_results["stored_missing_entries"].append({
                 "date": date_str,
                 "data": day_data,

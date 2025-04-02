@@ -7,8 +7,7 @@ def convert_pdf_to_image(pdf_bytes: bytes) -> bytes:
     """Convert first page of PDF to image bytes."""
     try:
         # Open PDF from bytes
-        pdf_document = fitz.open(stream=pdf_bytes, filetype="pdf")
-        
+        pdf_document = fitz.open(stream=pdf_bytes, filetype="pdf")        
         if pdf_document.page_count == 0:
             raise ValueError("PDF document is empty")
             

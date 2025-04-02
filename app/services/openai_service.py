@@ -13,7 +13,7 @@ from app.schemas.timesheet import TimesheetData, TimesheetRecord
 # Define prompts
 SYSTEM_PROMPT = """You are a helpful assistant that extracts timesheet information from images.
 Your task is to analyze the provided image and extract the following information for each timesheet entry:
-- date: The date in YYYY-MM-DD format
+- date: The date in MM-DD-YYYY format
 - time_in: The time in (start time) in HH:MM format (24-hour)
 - time_out: The time out (end time) in HH:MM format (24-hour)
 - lunch_timeout: The lunch/break duration in minutes (numeric)
@@ -24,14 +24,14 @@ Example format:
 {
   "records": [
     {
-      "date": "2023-07-01",
+      "date": "01-07-2023",
       "time_in": "09:00",
       "time_out": "17:00",
       "lunch_timeout": 30,
       "total_hours": 7.5
     },
     {
-      "date": "2023-07-02",
+      "date": "01-07-2023",
       "time_in": "09:30",
       "time_out": "18:00",
       "lunch_timeout": 45,
@@ -50,7 +50,7 @@ Extract all timesheet information from the provided image.
 If OCR text is available, use it as a reference: {ocr_text}
 
 Extract each timesheet record with the following information:
-- date (in YYYY-MM-DD format)
+- date (in MM-DD-YYYY format)
 - time_in (in HH:MM 24-hour format)
 - time_out (in HH:MM 24-hour format)
 - lunch_timeout (in minutes)
@@ -96,7 +96,8 @@ def generate_response(openai_client: OpenAI, base64_image: str, ocr_text: str) -
                     ],
                 },
             ],
-            temperature=0.1,
+            temperature=0.7,
+            top_p=0.3,
             max_tokens=1000,
             response_format={"type": "json_object"},
         )

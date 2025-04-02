@@ -211,14 +211,21 @@ async def get_monthly_timesheets(
         # Convert to ISO strings
         start_date_str = start_date.isoformat()
         end_date_str = end_date.isoformat()
-        print(start_date_str)
-        print(end_date_str)
 
         # Query audit logs for validated weeks where week_start is within the selected month
+        # audit_query = {
+        #     "user_id": user_id,
+        #     "additional_info.week_data.week_start": {"$gte": start_date_str, "$lt": end_date_str}
+        # }
+
+
         audit_query = {
             "user_id": user_id,
-            "additional_info.week_data.week_start": {"$gte": start_date_str, "$lt": end_date_str}
+            "additional_info.week_data.week_end": {"$gt": start_date_str},
+            "additional_info.week_data.week_start": {"$lt": end_date_str}
         }
+
+
         audit_logs = list(db.db.timesheet_audit.find(audit_query).sort("timestamp", -1))
         logger.info(f"Found {len(audit_logs)} audit logs for weeks starting in the month")
 

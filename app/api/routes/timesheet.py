@@ -15,7 +15,7 @@ from app.core.logging import logger
 from app.services.notification_services import EmailServices
 from app.core.security import get_current_user
 from app.schemas.auth import UserResponse
-from app.utils.timesheet import get_week_boundaries_from_input
+from app.utils.timesheet import get_week_boundaries_from_input, validate_weekday_dates
 from fastapi_jwt_auth import AuthJWT
 from app.utils.timesheet import parse_form_data, handle_image_upload
 
@@ -46,7 +46,16 @@ async def save_draft_timesheet(
 
         entry_dates = [datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
                        for date_str in daily_entries.keys()]
-        week_start, week_end = get_week_boundaries_from_input(entry_dates)
+        
+
+        # Validate that no entries are on weekends
+        validate_weekday_dates(entry_dates)
+
+        # week_start, week_end = get_week_boundaries_from_input(entry_dates)
+        try:
+            week_start, week_end = get_week_boundaries_from_input(entry_dates)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
         file_path = await handle_image_upload(image_file)
 
@@ -136,11 +145,11 @@ async def validate_timesheet(
         Authorize.jwt_required()
         if not current_user or not hasattr(current_user, "id"):
             raise HTTPException(status_code=401, detail="User not authenticated or invalid user data")
-        print("hhhhhhhhhhhhhhhhhhhhhhhhhhhhh")
         logger.info("Validating the timesheet_data")
         form = await request.form()
         logger.info(f"Validate Form Data {form}")
         daily_entries = parse_form_data(form=form)
+        file_path = await handle_image_upload(image_file=image_file)
 
         if daily_entries:
             # New submission or update
@@ -155,6 +164,9 @@ async def validate_timesheet(
                     raise HTTPException(status_code=400, detail=f"Invalid date format: {date_str}")
             if not entry_dates:
                 raise HTTPException(status_code=400, detail="No valid daily entries provided")
+            
+            # Validate that no entries are on weekends
+            validate_weekday_dates(entry_dates)
 
             week_start, week_end = get_week_boundaries_from_input(entry_dates)
             existing_doc = db.db.timesheet_entries.find_one({
@@ -163,9 +175,6 @@ async def validate_timesheet(
                 "week_end": week_end.isoformat()
             })
             print("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
-            # Determine image to use
-            file_path = await handle_image_upload(image_file=image_file)
-            print(file_path)
 
             if not file_path:
                 if existing_doc and "image_path" in existing_doc and existing_doc["image_path"]:
@@ -231,6 +240,7 @@ async def validate_timesheet(
                 user_id=str(current_user.id),
                 timesheet_data=week_data["days"]
             )
+            print(file_path, "llllllllllllllllllllllllllllllllll")
 
             # Perform validation
             validation_result = await validate_timesheet_image(
@@ -239,7 +249,6 @@ async def validate_timesheet(
                 week_data=week_data
             )
         
-            print("ttttttttttttttttttttttttttttttttt")
             # Update with validation results
             update_fields = {
                 "is_validated": True,
@@ -260,19 +269,19 @@ async def validate_timesheet(
             # Validate existing most recent final entry
 
             most_recent_final_entry = db.db.timesheet_entries.find_one(
-                {"user_id": str(current_user.id), "is_draft": False},
+                {"user_id": str(current_user.id), "is_draft": True},
                 sort=[("week_start", -1)]
             )
             if not most_recent_final_entry:
                 raise HTTPException(status_code=404, detail="No final timesheet found to validate")
-            if "image_path" not in most_recent_final_entry or not most_recent_final_entry["image_path"]:
-                raise HTTPException(status_code=400, detail="No image available for validation")
+            # if "image_path" not in most_recent_final_entry or not most_recent_final_entry["image_path"]:
+            #     raise HTTPException(status_code=400, detail="No image available for validation")
 
             most_recent_final_entry["_id"] = str(most_recent_final_entry["_id"])
 
             # Perform validation
             validation_result = await validate_timesheet_image(
-                image_path=most_recent_final_entry["image_path"],
+                image_path=file_path,
                 current_user=current_user,
                 week_data=most_recent_final_entry
             )
@@ -321,6 +330,7 @@ def get_dates_from_timesheets(user_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.get("/timesheets/dates", response_model=list[str], tags=["timesheets"])
 async def get_timesheet_dates(
     current_user: dict = Depends(get_current_user), 
@@ -335,6 +345,7 @@ async def get_timesheet_dates(
 
     user_id = str(current_user.id)  # Get user ID from authentication
     return get_dates_from_timesheets(user_id)
+
 
 def get_dates_from_timesheets_draft(user_id: str):
     """
@@ -362,6 +373,7 @@ def get_dates_from_timesheets_draft(user_id: str):
         return entries
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/timesheets/dates/draft", response_model=list[dict], tags=["timesheets"])
 async def get_timesheet_dates_draft(
