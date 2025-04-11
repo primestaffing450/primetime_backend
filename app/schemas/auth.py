@@ -78,5 +78,17 @@ class TokenData(BaseModel):
 
 class PasswordChange(BaseModel):
     """Password change schema."""
-    current_password: str
+    current_password: str = Field(..., min_length=settings.PASSWORD_MIN_LENGTH, max_length=settings.PASSWORD_MAX_LENGTH)
     new_password: str = Field(..., min_length=settings.PASSWORD_MIN_LENGTH, max_length=settings.PASSWORD_MAX_LENGTH)
+
+
+class PasswordResetRequest(BaseModel):
+    """Password reset request schema."""
+    email: EmailStr
+
+
+class PasswordResetToken(BaseModel):
+    """Password reset token schema."""
+    token: str
+    password: str = Field(..., min_length=settings.PASSWORD_MIN_LENGTH, max_length=settings.PASSWORD_MAX_LENGTH)
+    confirm_password: str = Field(..., min_length=settings.PASSWORD_MIN_LENGTH, max_length=settings.PASSWORD_MAX_LENGTH)

@@ -72,6 +72,8 @@ class Settings(BaseSettings):
     SMTP_FROM: str = os.getenv("SMTP_FROM", "noreply@example.com")
     SMTP_FROM_NAME: str = os.getenv("SMTP_FROM_NAME", "Timesheet Extraction Service")
 
+    # Frontend URL for password reset links
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
     IMAGE_DIR: str = os.getenv("IMAGE_DIR", "images")
 

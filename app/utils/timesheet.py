@@ -12,6 +12,7 @@ import os
 from fastapi import HTTPException
 
 
+
 def store_audit_log(user_id: str, extracted_data: dict, comparison_results: dict, additional_info: dict = None) -> str:
     """
     Stores an audit log entry with the given timesheet data and validation results into a separate collection.
@@ -122,10 +123,56 @@ def parse_time_format(time_str: str) -> str:
 #     return week_start, week_end
 
 
+# def get_week_boundaries_from_input(day_dates: list) -> (datetime, datetime):
+#     """
+#     Given a list of datetime objects, compute week boundaries (Monday to Friday) based on the earliest date,
+#     allowing the week to span months.
+#     """
+#     if not day_dates:
+#         raise ValueError("No day dates provided.")
+    
+#     # Ensure all dates are timezone-aware (UTC)
+#     # day_dates = [dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc) for dt in day_dates]
+    
+#     # Find the earliest date
+#     # base_date = min(day_dates)
+
+#     # Get the local timezone.
+#     # local_tz = get_localzone()
+
+#     # Convert all dates to UTC; assume naïve datetimes are local.
+#     # converted_dates = []
+#     # for dt in day_dates:
+#     #     # Localize if naive.
+#     #     if dt.tzinfo is None:
+#     #         dt = local_tz.localize(dt)
+#     #     dt_utc = dt.astimezone(timezone.utc)
+#     #     # Only include dates Monday(0) to Friday(4)
+#     #     if dt_utc.weekday() >= 5:
+#     #         # raise ValueError("Only Monday to Friday dates are allowed in weekly entry")
+#     #         continue
+#     #     converted_dates.append(dt_utc)
+    
+#     # # Find the earliest (now in UTC)
+#     # base_date = min(converted_dates)
+
+#     # if not converted_dates:
+#     #     raise ValueError("No valid Monday-Friday dates provided for computing week boundaries.")
+    
+#     # Compute Monday of the base_date's week
+#     computed_monday = base_date - timedelta(days=base_date.weekday())
+#     # Compute Friday of that week
+#     computed_friday = computed_monday + timedelta(days=4)
+    
+#     return computed_monday, computed_friday
+
+
 def get_week_boundaries_from_input(day_dates: list) -> (datetime, datetime):
     """
-    Given a list of datetime objects, compute week boundaries (Monday to Friday) based on the earliest date,
-    allowing the week to span months.
+    Given a list of datetime objects, compute week boundaries (Monday to Friday).
+    If exactly two dates are provided and at least one is a Saturday or Sunday,
+    return the next week's Monday and Friday. Otherwise, return the Monday and
+    Friday of the earliest date's week. Boundaries are set to midnight UTC.
     """
     if not day_dates:
         raise ValueError("No day dates provided.")
@@ -136,13 +183,20 @@ def get_week_boundaries_from_input(day_dates: list) -> (datetime, datetime):
     # Find the earliest date
     base_date = min(day_dates)
     
-    # Compute Monday of the base_date's week
-    computed_monday = base_date - timedelta(days=base_date.weekday())
+    # Compute Monday of the base_date's week and set to midnight UTC
+    monday = base_date - timedelta(days=base_date.weekday())
+    monday = monday.replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # If exactly two dates and at least one is Saturday (5) or Sunday (6), shift to next week
+    if any(date.weekday() in [5, 6] for date in day_dates):
+        monday += timedelta(days=7)
     
     # Compute Friday of that week
-    computed_friday = computed_monday + timedelta(days=4)
+    friday = monday + timedelta(days=4)
     
-    return computed_monday, computed_friday
+    return monday, friday
+
+
 
 
 def get_first_and_last_weekdays_of_month(base_date: datetime):

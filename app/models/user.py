@@ -34,7 +34,11 @@ class PyObjectId(ObjectId):
     def __get_validators__(cls):
         yield cls.validate
 
-    @classmethod
+    # @classmethod
+    # def validate(cls, v, info=None):  # Accept an extra argument (info)
+    #     if not ObjectId.is_valid(v):
+    #         raise ValueError("Invalid ObjectId")
+    #     return ObjectId(v)
     def validate(cls, value, values, config, field):
         if not ObjectId.is_valid(value):
             raise ValueError("Invalid object id")

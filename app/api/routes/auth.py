@@ -21,6 +21,7 @@ from app.services.auth_service import (
     authenticate_user,
     create_user,
     get_user_by_id,
+    get_user_by_email,
 )
 from app.schemas.auth import (
     UserCreate,
@@ -28,7 +29,10 @@ from app.schemas.auth import (
     Token,
     PasswordChange,
     UserLogin,
+    PasswordResetRequest,
+    PasswordResetToken,
 )
+from app.services.password_reset_service import PasswordResetService
 
 router = APIRouter()
 
@@ -227,3 +231,64 @@ async def change_password(
     
     logger.info(f"Password updated successfully for user: {current_user.username}")
     return current_user
+
+
+@router.post("/forgot-password", status_code=status.HTTP_200_OK)
+async def forgot_password(request: PasswordResetRequest):
+    """
+    Request password reset for a user.
+    """
+    try:
+        # Get user by email
+        user = get_user_by_email(request.email)
+        if not user:
+            # Return success even if user not found to prevent email enumeration
+            return {"message": "User not found"}
+        
+        # Generate reset token
+        reset_service = PasswordResetService()
+        token = await reset_service.generate_reset_token(str(user.id))
+        
+        # Send reset email
+        await reset_service.send_reset_email(user.email, token)
+        
+        return {"message": "Password reset link sent"}
+    except Exception as e:
+        logger.error(f"Error in forgot password: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while processing your request"
+        )
+
+@router.post("/reset-password", status_code=status.HTTP_200_OK)
+async def reset_password(request: PasswordResetToken):
+    """
+    Reset user password using a valid token.
+    """
+    try:
+        # Validate passwords match
+        if request.password != request.confirm_password:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Passwords do not match"
+            )
+        
+        # Reset password
+        reset_service = PasswordResetService()
+        success = await reset_service.reset_password(request.token, request.password)
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired reset token"
+            )
+        
+        return {"message": "Password has been reset successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in reset password: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while processing your request"
+        )
