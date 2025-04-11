@@ -35,10 +35,10 @@ class PyObjectId(ObjectId):
         yield cls.validate
 
     @classmethod
-    def validate(cls, v, info=None):  # Accept an extra argument (info)
-        if not ObjectId.is_valid(v):
-            raise ValueError("Invalid ObjectId")
-        return ObjectId(v)
+    def validate(cls, value, values, config, field):
+        if not ObjectId.is_valid(value):
+            raise ValueError("Invalid object id")
+        return ObjectId(value)
 
     @classmethod
     def __get_pydantic_json_schema__(cls, field_schema):

@@ -3,13 +3,13 @@ Utility functions for image processing and text extraction.
 """
 
 import base64
-import pytesseract
+# import pytesseract
 from PIL import Image
 import io
 from app.core.logging import logger
 
 # Set Tesseract executable path
-pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+# pytesseract.pytesseract.tesseract_cmd = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
 
 def extract_text_from_image(file_bytes: bytes) -> str:
     """

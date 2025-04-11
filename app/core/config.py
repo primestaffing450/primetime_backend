@@ -5,8 +5,8 @@ Configuration settings for the application.
 import os
 from typing import List
 from pydantic import BaseModel
-# from pydantic.v1 import BaseSettings
-from pydantic_settings import BaseSettings
+from pydantic.v1 import BaseSettings
+# from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 from fastapi_jwt_auth import AuthJWT
 

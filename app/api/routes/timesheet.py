@@ -49,7 +49,7 @@ async def save_draft_timesheet(
         
 
         # Validate that no entries are on weekends
-        validate_weekday_dates(entry_dates)
+        # validate_weekday_dates(entry_dates)
 
         # week_start, week_end = get_week_boundaries_from_input(entry_dates)
         try:
@@ -166,7 +166,7 @@ async def validate_timesheet(
                 raise HTTPException(status_code=400, detail="No valid daily entries provided")
             
             # Validate that no entries are on weekends
-            validate_weekday_dates(entry_dates)
+            # validate_weekday_dates(entry_dates)
 
             week_start, week_end = get_week_boundaries_from_input(entry_dates)
             existing_doc = db.db.timesheet_entries.find_one({
