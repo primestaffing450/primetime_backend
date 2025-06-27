@@ -19,6 +19,9 @@ Your task is to analyze the provided image and extract the following information
 - lunch_timeout: The lunch/break duration in minutes (numeric)
 - total_hours: The total hours worked as a decimal
 
+
+**Remember**
+- If you extract something like 5/5 than convert the slash into -. In image - is denoted with a slash so if you get 5/5 it menas 5-5.
 Return your response as a JSON object with an array of 'records', where each record contains the extracted information for one timesheet entry.
 Example format:
 {

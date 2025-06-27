@@ -431,21 +431,20 @@ async def export_all_weekly_timesheets_json(
     Export last week's timesheet data for all users as JSON.
     If no dates are provided, it defaults to the last full week (Monday–Sunday).
     """
+    now = datetime.now(timezone.utc)
+    last_monday = (now - timedelta(days=now.weekday() + 7)).replace(hour=0, minute=0, second=0, microsecond=0)
+    last_friday = last_monday + timedelta(days=4)
+    
+    # Query for last week's Monday to Friday data only
+    query = {
+        "week_start": last_monday.isoformat(),
+        "week_end": last_friday.isoformat()
+    }
+    
+    weekly_entries = list(db.db.timesheet_entries.find(query).sort("week_start", 1))
+    if not weekly_entries:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No weekly timesheets found")
     try:
-        now = datetime.now(timezone.utc)
-        last_monday = (now - timedelta(days=now.weekday() + 7)).replace(hour=0, minute=0, second=0, microsecond=0)
-        last_friday = last_monday + timedelta(days=4)
-        
-        # Query for last week's Monday to Friday data only
-        query = {
-            "week_start": last_monday.isoformat(),
-            "week_end": last_friday.isoformat()
-        }
-        
-        weekly_entries = list(db.db.timesheet_entries.find(query).sort("week_start", 1))
-        if not weekly_entries:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No weekly timesheets found")
-        
         export_rows = []
         for weekly_entry in weekly_entries:
             weekly_entry["_id"] = str(weekly_entry["_id"])

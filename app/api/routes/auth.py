@@ -33,6 +33,8 @@ from app.schemas.auth import (
     PasswordResetToken,
 )
 from app.services.password_reset_service import PasswordResetService
+from fastapi.responses import JSONResponse
+from starlette.status import HTTP_404_NOT_FOUND
 
 router = APIRouter()
 
@@ -243,7 +245,10 @@ async def forgot_password(request: PasswordResetRequest):
         user = get_user_by_email(request.email)
         if not user:
             # Return success even if user not found to prevent email enumeration
-            return {"message": "User not found"}
+            return JSONResponse(
+                status_code=HTTP_404_NOT_FOUND,
+                content={"detail": "User Not Found"}
+            )
         
         # Generate reset token
         reset_service = PasswordResetService()
@@ -291,4 +296,43 @@ async def reset_password(request: PasswordResetToken):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An error occurred while processing your request"
+        )
+        
+
+@router.delete("/delete-account", status_code=status.HTTP_200_OK)
+async def delete_user_account(
+    request: Request,
+    current_user: UserResponse = Depends(get_current_user)
+):
+    """
+    Delete the currently authenticated user account.
+    """
+    try:
+        user_id = ObjectId(current_user.id)
+
+        # Confirm user exists
+        user = db.db.users.find_one({"_id": user_id})
+        if not user:
+            logger.warning(f"User not found for deletion: {current_user.username}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+
+        # Delete user
+        result = db.db.users.delete_one({"_id": user_id})
+        if result.deleted_count == 0:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to delete user"
+            )
+
+        logger.info(f"User deleted: {current_user.username}")
+        return {"message": "User account deleted successfully"}
+    
+    except Exception as e:
+        logger.error(f"Error deleting user account: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while deleting the account"
         )
