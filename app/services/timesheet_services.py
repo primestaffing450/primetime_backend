@@ -316,7 +316,7 @@ async def validate_timesheet_image(image_path: str, current_user: UserResponse, 
         extracted_data=extracted_result["data"],
         previous_entries=[week_data]
     )
-
+    
    # Build validation info for each day
     day_validation_info = {}
     for item in comparison_results.get("matches", []):
@@ -340,6 +340,8 @@ async def validate_timesheet_image(image_path: str, current_user: UserResponse, 
 
     for day in week_data.get("days", []):
         day_key = day.get("date", "")[:10]  # Extract YYYY-MM-DD
+        parts = day_key.split("-")  # ["2025", "07", "03"]
+        day_key = f"{parts[1]}-{parts[2]}-{parts[0]}" 
         status_val = day_validation_info.get(day_key, "missing from image")  # Default to "missing from image"
         day["status"] = status_val
         day["validation_info"] = {"status": status_val, "details": None}

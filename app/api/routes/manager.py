@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -473,10 +474,14 @@ async def export_all_weekly_timesheets_json(
             overall_validation_status = formatted_audit_logs[0].get("comparison_results", {}).get("valid", False) if formatted_audit_logs else False
             ai_discrepancy = "Y" if not overall_validation_status else "N"
             date_submitted = weekly_entry.get("created_at", "")
+            image_path = weekly_entry.get("image_path", "")
+            if image_path:
+                image_path = os.getenv("BACKEND_URL") + f"/{image_path}"
             
             for day in week_data["days"]:
                 row = {
                     "date_submitted": date_submitted,
+                    "image_path": image_path,
                     "name": submitter_name,
                     "email": submitter_email,
                     "date_worked": day.get("date"),
@@ -484,6 +489,7 @@ async def export_all_weekly_timesheets_json(
                     "time_out": day.get("time_out"),
                     "lunch": day.get("lunch_timeout"),
                     "total_daily_hours": day.get("total_hours"),
+                    "notes": day.get("notes", ""),
                     "approve_reject": "approved" if day.get("status") == "approved" else "reject",
                     "ai_Discrepancy_detected": ai_discrepancy
                 }
@@ -494,3 +500,76 @@ async def export_all_weekly_timesheets_json(
     except Exception as e:
         logger.error(f"Error exporting weekly timesheets: {str(e)}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error exporting weekly timesheets")
+
+
+@router.delete("/timesheets/weekly/{week_id}", tags=["timesheets"])
+async def delete_weekly_timesheet(
+    week_id: str,
+    current_user=Depends(verify_manager_role)
+):
+    """
+    Delete a weekly timesheet record from the database.
+    Only managers can delete timesheet records to allow users to resubmit.
+    
+    This endpoint:
+    - Deletes the timesheet entry from timesheet_entries collection
+    - Deletes associated audit logs from timesheet_audit collection
+    - Removes the associated image file if it exists
+    - Returns confirmation of deletion
+    """
+    try:
+        logger.info(f"Manager {current_user.full_name} attempting to delete weekly timesheet: {week_id}")
+        
+        # First check if timesheet exists
+        timesheet = db.db.timesheet_entries.find_one({"_id": ObjectId(week_id)})
+        if not timesheet:
+            raise HTTPException(
+                status_code=404,
+                detail="Weekly timesheet entry not found"
+            )
+        
+        # Get user information for logging
+        user = db.db.users.find_one({"_id": ObjectId(timesheet["user_id"])})
+        user_name = user.get("full_name", "Unknown User") if user else "Unknown User"
+        
+        # Store image path for deletion
+        image_path = timesheet.get("image_path")
+        
+        # Delete the timesheet entry
+        delete_result = db.db.timesheet_entries.delete_one({"_id": ObjectId(week_id)})
+        
+        if delete_result.deleted_count == 0:
+            raise HTTPException(
+                status_code=404,
+                detail="Failed to delete timesheet entry"
+            )
+        
+        # Delete associated audit logs
+        audit_delete_result = db.db.timesheet_audit.delete_many({
+            "user_id": timesheet["user_id"],
+            "additional_info.week_data._id": week_id
+        })
+        
+        logger.info(f"Successfully deleted weekly timesheet {week_id} for user {user_name} by manager {current_user.full_name}")
+        
+        return {
+            "message": "Weekly timesheet deleted successfully",
+            "week_id": week_id,
+            "user_name": user_name,
+            "week_start": timesheet.get("week_start"),
+            "week_end": timesheet.get("week_end"),
+            "deleted_by": current_user.full_name,
+            "deleted_at": datetime.now(timezone.utc).isoformat(),
+            "audit_logs_deleted": audit_delete_result.deleted_count,
+            "image_deleted": bool(image_path and os.path.exists(image_path))
+        }
+        
+    except HTTPException as he:
+        logger.error(f"HTTP Exception in delete_weekly_timesheet: {str(he)}")
+        raise he
+    except Exception as e:
+        logger.error(f"Error deleting weekly timesheet: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error deleting weekly timesheet"
+        )

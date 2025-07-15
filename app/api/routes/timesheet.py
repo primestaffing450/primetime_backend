@@ -156,7 +156,6 @@ async def validate_timesheet(
             entry_dates = []
             for date_str in daily_entries.keys():
                 try:
-                    print("aaaaaaaaaaaaaaaaaa")
                     dt = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
                     entry_dates.append(dt)
                 except ValueError as e:
@@ -174,7 +173,6 @@ async def validate_timesheet(
                 "week_start": week_start.isoformat(),
                 "week_end": week_end.isoformat()
             })
-            print("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
 
             if not file_path:
                 if existing_doc and "image_path" in existing_doc and existing_doc["image_path"]:
@@ -240,7 +238,6 @@ async def validate_timesheet(
                 user_id=str(current_user.id),
                 timesheet_data=week_data["days"]
             )
-            print(file_path, "llllllllllllllllllllllllllllllllll")
 
             # Perform validation
             validation_result = await validate_timesheet_image(
@@ -389,4 +386,57 @@ async def get_timesheet_dates_draft(
 
     user_id = str(current_user.id)  # Get user ID from authentication
     return get_dates_from_timesheets_draft(user_id)
+
+
+
+@router.delete("/timesheet/date/{date}", tags=["timesheets"])
+async def delete_draft_timesheet_by_date(
+    date: str,
+    current_user: UserResponse = Depends(get_current_user),
+    Authorize: AuthJWT = Depends()
+):
+    """
+    Delete a draft timesheet entry for a specific date. Only draft entries can be deleted.
+    """
+    try:
+        Authorize.jwt_required()
+        if not current_user or not hasattr(current_user, "id"):
+            raise HTTPException(status_code=401, detail="User not authenticated or invalid user data")
+
+        # Validate date format
+        try:
+            datetime.strptime(date, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+
+        # Find and update timesheet entries to remove the specific date
+        result = db.db.timesheet_entries.update_many(
+            {
+                "user_id": str(current_user.id),
+                "days.date": date,
+                "is_draft": True,
+                "is_validated": False
+            },
+            {
+                "$pull": {"days": {"date": date}},
+                "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}
+            }
+        )
+
+        if result.modified_count == 0:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"No draft timesheet entry found for date {date}"
+            )
+
+        return {
+            "message": f"Successfully deleted draft timesheet entry for date {date}",
+            "date": date
+        }
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Error in delete_draft_timesheet_by_date: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
