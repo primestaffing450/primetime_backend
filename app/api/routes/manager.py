@@ -3,9 +3,10 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from bson import ObjectId
+from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
-from datetime import timedelta
+from fastapi_jwt_auth import AuthJWT
 
 import base64
 from app.core.database import db
@@ -17,6 +18,8 @@ from app.schemas.auth import UserRole
 from app.schemas.manager import (
     UserListResponse,
 )
+from app.schemas.auth import UserResponse
+from app.schemas.timesheet import TimesheetUpdate
 from app.services.notification_services import EmailServices
 
 router = APIRouter()
@@ -326,76 +329,68 @@ async def get_weekly_timesheet(
     This endpoint does not update the database; it only merges stored data for the response.
     """
     try:
-        # Fetch the weekly timesheet document.
+        # Fetch the weekly timesheet document
         weekly_entry = db.db.timesheet_entries.find_one({"_id": ObjectId(week_id)})
+        
         if not weekly_entry:
             raise HTTPException(status_code=404, detail="Weekly timesheet entry not found")
         weekly_entry["_id"] = str(weekly_entry["_id"])
         
-        # Retrieve audit logs referencing this week.
+        # Prepare week_data with actual timesheet data
+        week_data = {
+            "week_id": weekly_entry["_id"],
+            "week_start": weekly_entry["week_start"],
+            "week_end": weekly_entry["week_end"],
+            "days": weekly_entry.get("days", []),  # Use actual timesheet data
+        }
+        
+        # Get audit data for validation info
         audit_query = {
             "user_id": weekly_entry["user_id"],
             "additional_info.week_data._id": week_id
         }
         audit_logs = list(db.db.timesheet_audit.find(audit_query).sort("timestamp", -1))
-        if not audit_logs:
-            raise HTTPException(status_code=404, detail="No audit log found for this weekly timesheet")
+        print("$$$$$")
         
-        most_recent_audit = audit_logs[0]
-        most_recent_audit["_id"] = str(most_recent_audit["_id"])
-
-         # Extract validation data from audit log
-        week_data_from_audit = most_recent_audit.get("additional_info", {}).get("week_data", {})
-        comparison_results = most_recent_audit.get("comparison_results", {})
-        image = most_recent_audit.get("additional_info", {}).get("image_path")
-        overall_validation_status = comparison_results.get("valid", False)
-        
-
-        # Prepare week_data, overwriting with audit log's week_data for days
-        week_data = {
-            "week_id": weekly_entry["_id"],
-            "week_start": weekly_entry["week_start"],
-            "week_end": weekly_entry["week_end"],
-            "days": week_data_from_audit.get("days", []),
-            # "validation_results": comparison_results
-        }
-
-        
-        # --- MODIFICATION START: Build AI validation info for each day ---
-        mismatched = {entry["date"]: entry for entry in comparison_results.get("mismatched_entries", [])}
-        missing = {entry["date"]: entry for entry in comparison_results.get("missing_entries", [])}
-        stored_missing = {entry["date"]: entry for entry in comparison_results.get("stored_missing_entries", [])}
-        matches = {entry["date"]: entry for entry in comparison_results.get("matches", [])}
-        
-        # For each day in week_data, compute the ai_validation_info.
-        for day in week_data["days"]:
-            day_date = day.get("date", "")[:10]
-            ai_status = "approved"
-            reason = "All fields match."
+        if audit_logs:
+            most_recent_audit = audit_logs[0]
+            most_recent_audit["_id"] = str(most_recent_audit["_id"])
+            comparison_results = most_recent_audit.get("comparison_results", {})
+            image = most_recent_audit.get("additional_info", {}).get("image_path")
+            overall_validation_status = comparison_results.get("valid", False)
             
-            if day_date in mismatched:
-                ai_status = "not approved"
-                reason = "; ".join(mismatched[day_date].get("details", []))
-            elif day_date in missing:
-                ai_status = "missing from stored data"
-                reason = "; ".join(missing[day_date].get("details", []))
-            elif day_date in stored_missing:
-                ai_status = "missing from image"
-                reason = "; ".join(stored_missing[day_date].get("details", []))
+            # Process validation info
+            mismatched = {entry["date"]: entry for entry in comparison_results.get("mismatched_entries", [])}
+            missing = {entry["date"]: entry for entry in comparison_results.get("missing_entries", [])}
+            stored_missing = {entry["date"]: entry for entry in comparison_results.get("stored_missing_entries", [])}
             
-            day["ai_validation_info"] = {"status": ai_status, "reason": reason}
+            # Add validation info to each day
+            for day in week_data["days"]:
+                day_date = day.get("date", "")[:10]
+                ai_status = "approved"
+                reason = "All fields match."
+                
+                if day_date in mismatched:
+                    ai_status = "not approved"
+                    reason = "; ".join(mismatched[day_date].get("details", []))
+                elif day_date in missing:
+                    ai_status = "missing from stored data"
+                    reason = "; ".join(missing[day_date].get("details", []))
+                elif day_date in stored_missing:
+                    ai_status = "missing from image"
+                    reason = "; ".join(stored_missing[day_date].get("details", []))
+                
+                day["ai_validation_info"] = {"status": ai_status, "reason": reason}
+        else:
+            image = None
+            overall_validation_status = False
             
-        
-        logger.info(f"Week data from audit log: {week_data}")
-        logger.info(f"Overall validation status: {overall_validation_status}")
-        logger.info(f"Image from audit log: {image}")
-        
         return {
             "week_data": week_data,
             "image": image,
             "overall_validation_status": overall_validation_status,
         }
-    
+        
     except HTTPException as he:
         logger.error(f"HTTP Exception: {str(he)}")
         raise he
@@ -573,3 +568,72 @@ async def delete_weekly_timesheet(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error deleting weekly timesheet"
         )
+
+
+
+
+@router.patch("/timesheets/{timesheet_id}/update", tags=["timesheets"])
+async def edit_timesheet_entry(
+    timesheet_id: str,
+    update_data: TimesheetUpdate,
+    current_user: UserResponse = Depends(verify_manager_role),
+    Authorize: AuthJWT = Depends()
+):
+    """
+    Edit a specific timesheet entry for a user. Only managers can edit.
+    """
+    try:
+        Authorize.jwt_required()
+
+        # Find the timesheet document
+        timesheet_doc = db.db.timesheet_entries.find_one({"_id": ObjectId(timesheet_id)})
+        print(timesheet_doc)
+
+        if not timesheet_doc:
+            raise HTTPException(status_code=404, detail="Timesheet not found for the given user and date")
+
+        # Find the index of the day we want to update
+        day_index = None
+        for i, day in enumerate(timesheet_doc.get('days', [])):
+            print(f"->>>>>>> {i}, {day}")
+            if day.get('date') == update_data.date:
+                day_index = i
+                break
+
+        if day_index is None:
+            raise HTTPException(status_code=404, detail=f"Day {update_data.date} not found in timesheet")
+
+        # Prepare update fields using the correct array index
+        update_fields = {}
+        if update_data.time_in is not None:
+            update_fields[f"days.{day_index}.time_in"] = update_data.time_in
+        if update_data.time_out is not None:
+            update_fields[f"days.{day_index}.time_out"] = update_data.time_out
+        if update_data.lunch_timeout is not None:
+            update_fields[f"days.{day_index}.lunch_timeout"] = update_data.lunch_timeout
+        if update_data.total_hours is not None:
+            update_fields[f"days.{day_index}.total_hours"] = update_data.total_hours
+        
+        if not update_fields:
+            raise HTTPException(status_code=400, detail="No valid fields to update")
+
+        update_fields["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+        # Update the document using the specific array indices
+        result = db.db.timesheet_entries.update_one(
+            {"_id": ObjectId(timesheet_id)},
+            {"$set": update_fields}
+        )
+        print("result")
+
+        if result.modified_count == 0:
+            raise HTTPException(status_code=404, detail="Timesheet entry not found or not modified")
+
+        return {"message": f"Timesheet {timesheet_id} updated successfully"}
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        logger.error(f"Error in edit_timesheet_entry: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+

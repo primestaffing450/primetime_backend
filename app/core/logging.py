@@ -23,7 +23,7 @@ def setup_logging():
     )
     
     # Disable noisy loggers
-    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    # logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     
     # Create a logger for the application
     logger = logging.getLogger("app")

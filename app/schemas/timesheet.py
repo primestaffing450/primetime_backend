@@ -2,8 +2,8 @@
 Pydantic models for timesheet data validation.
 """
 
-from datetime import date, time
-from pydantic import BaseModel, Field
+from datetime import date, datetime, time 
+from pydantic import BaseModel, Field, validator
 from typing import Dict, List, Optional, Union, Any
 
 
@@ -22,6 +22,11 @@ class TimesheetData(BaseModel):
 
 
 class ValidationResult(BaseModel):
+    # """Model for validation results."""
+    # matches: bool
+    # confidence: float
+    # differences: Dict[str, Any]
+    # explanation: str
     """Model for individual field validation results."""
     date_match: Optional[bool] = None
     time_in_match: Optional[bool] = None
@@ -29,6 +34,7 @@ class ValidationResult(BaseModel):
     time_out_match: Optional[bool] = None
     total_hours_match: Optional[bool] = None
     computed_vs_provided: Optional[bool] = None
+
 
 
 class SingleRecordValidation(BaseModel):
@@ -53,3 +59,43 @@ class UploadResponse(BaseModel):
     message: str
     image_data: Dict[str, Any]=None
     validation_results: Union[SingleRecordValidation, MultipleRecordsValidation] 
+ 
+
+class TimesheetUpdate(BaseModel):
+    date: str = Field(..., description="Date of the timesheet entry in YYYY-MM-DD format")
+    lunch_timeout: Optional[str] = Field(None, example="30")
+    time_in: Optional[str] = Field(None, example="09:00")
+    time_out: Optional[str] = Field(None, example="17:00")
+    total_hours: Optional[str] = Field(None, example="12")
+    
+
+    @validator('time_in', 'time_out')
+    def validate_time_format(cls, v):
+        if v is None:
+            return v
+        try:
+            t, ampm = v.split(" ")
+            hours, minutes = map(int, t.split(':'))
+            if not (0 <= hours <= 23 and 0 <= minutes <= 59):
+                raise ValueError("Invalid time format")
+        except ValueError:
+            raise ValueError("Time must be in HH:MM format")
+        return v
+
+    # @validator("total_hours")
+    # def validate_total_hours(cls, h):
+    #     try:
+    #         hours, minutes = map(int, h.split(":"))
+    #         if not (0 <= hours <= 23 and 0 <= minutes <= 59):
+    #             raise ValueError("Invalid time format.")
+    #     except ValueError:
+    #         raise ValueError("Total hours must be in HH:MM format")
+    #     return h
+    
+    @validator("date")
+    def validate_date_format(cls, v):
+        try:
+            datetime.strptime(v, "%Y-%m-%d")
+            return v
+        except ValueError:
+            raise ValueError("Date must be in YYYY-MM-DD format")
