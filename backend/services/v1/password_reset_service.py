@@ -5,13 +5,14 @@ Password reset service for handling password reset functionality.
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 import secrets
+
 from bson import ObjectId
 
-from app.core.config import settings
-from app.core.logging import logger
-from app.core.database import db
-from app.services.auth_service import get_password_hash
-from app.services.notification_services import EmailServices
+from backend.core.v1.config import settings
+from backend.core.v1.logging import logger
+from backend.core.v1.database import db
+from backend.services.v1.auth_service import get_password_hash
+from backend.services.v1.notification_services import EmailServices
 
 class PasswordResetService:
     """Service for handling password reset functionality."""

@@ -4,7 +4,8 @@ Logging configuration for the application.
 
 import logging
 import sys
-from app.core.config import settings
+
+from backend.core.v1.config import settings
 
 # Configure logger
 def setup_logging():

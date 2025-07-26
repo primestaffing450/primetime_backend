@@ -1,7 +1,9 @@
-from typing import Any, List, Optional, Dict
 from datetime import datetime
+from typing import Any, List, Optional, Dict
+
 from pydantic import BaseModel
-from app.schemas.timesheet import TimesheetRecord
+
+from backend.schemas.v1.timesheet import TimesheetRecord
 
 class UserListResponse(BaseModel):
     message: str

@@ -12,10 +12,10 @@ from fastapi_jwt_auth import AuthJWT
 from fastapi_jwt_auth.exceptions import AuthJWTException
 from passlib.context import CryptContext
 
-from app.core.config import settings
-from app.core.logging import logger
-from app.schemas.auth import UserRole
-from app.services.auth_service import get_user_by_id
+from backend.core.v1.config import settings
+from backend.core.v1.logging import logger
+from backend.schemas.v1.auth import UserRole
+from backend.services.v1.auth_service import get_user_by_id
 
 # Constants
 ALGORITHM = "HS256"

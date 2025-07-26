@@ -4,9 +4,10 @@ User model for MongoDB storage using Pydantic.
 
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
+
+from bson import ObjectId
 from enum import Enum
 from pydantic import BaseModel, Field, EmailStr
-from bson import ObjectId
 
 
 # class PyObjectId(ObjectId):

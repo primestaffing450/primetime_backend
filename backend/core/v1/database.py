@@ -5,8 +5,8 @@ MongoDB database configuration using PyMongo.
 from typing import Optional
 from pymongo import MongoClient
 from pymongo.database import Database
-from app.core.config import settings
-from app.core.logging import logger
+from backend.core.v1.config import settings
+from backend.core.v1.logging import logger
 
 
 class MongoDB:

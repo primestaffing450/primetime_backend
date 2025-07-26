@@ -9,18 +9,18 @@ from fastapi.responses import JSONResponse
 from fastapi_jwt_auth import AuthJWT
 
 import base64
-from app.core.database import db
-from app.utils.managers import merge_audit_info_into_week
-from app.core.logging import logger
-from app.core.security import verify_manager_role
-from app.models.user import RoleUpdate
-from app.schemas.auth import UserRole
-from app.schemas.manager import (
+from backend.core.v1.database import db
+from backend.utils.v1.managers import merge_audit_info_into_week
+from backend.core.v1.logging import logger
+from backend.core.v1.security import verify_manager_role
+from backend.models.v1.user import RoleUpdate
+from backend.schemas.v1.auth import UserRole
+from backend.schemas.v1.manager import (
     UserListResponse,
 )
-from app.schemas.auth import UserResponse
-from app.schemas.timesheet import TimesheetUpdate
-from app.services.notification_services import EmailServices
+from backend.schemas.v1.auth import UserResponse
+from backend.schemas.v1.timesheet import TimesheetUpdate
+from backend.services.v1.notification_services import EmailServices
 
 router = APIRouter()
 

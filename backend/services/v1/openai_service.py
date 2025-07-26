@@ -3,11 +3,13 @@ OpenAI integration service for extracting timesheet information.
 """
 
 import json
-from openai import OpenAI
 from typing import Dict, Any, Optional
-from app.core.logging import logger
-from app.core.config import settings
-from app.schemas.timesheet import TimesheetData, TimesheetRecord
+
+from openai import OpenAI
+
+from backend.core.v1.logging import logger
+from backend.core.v1.config import settings
+from backend.schemas.v1.timesheet import TimesheetData, TimesheetRecord
 
 
 # Define prompts

@@ -1,18 +1,23 @@
-from typing import List, Dict, Any, Optional
-from app.core.config import settings
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from email.utils import formataddr
-from datetime import timezone, timedelta
-from email.message import EmailMessage
-from email.utils import formataddr
+# Built-in libraries
 import datetime
-from smtplib import SMTP
-from app.core.logging import logger
-from app.core.database import db
 import os
+from email.message import EmailMessage
 from email.mime.image import MIMEImage
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.utils import formataddr
+from email.utils import formataddr
+from smtplib import SMTP
+from typing import List, Dict, Any, Optional
+
+# External libraries
 from bson import ObjectId
+
+# Application modules
+from backend.core.v1.config import settings
+from backend.core.v1.database import db
+from backend.core.v1.logging import logger
+
 
 class EmailServices:
     

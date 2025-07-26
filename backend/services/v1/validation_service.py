@@ -3,18 +3,20 @@ Service for validating timesheet information using AI-based validation.
 """
 
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Union, Any
 import json
-from app.core.logging import logger
-from app.core.config import settings
-from app.schemas.timesheet import (
+from typing import Dict, List, Optional, Union, Any
+
+from backend.core.v1.logging import logger
+from backend.core.v1.config import settings
+from backend.schemas.v1.timesheet import (
     TimesheetRecord,
     TimesheetData,
     ValidationResult,
     SingleRecordValidation,
     MultipleRecordsValidation
 )
-from app.services.openai_service import TimesheetImageExtractor
+from backend.services.v1.openai_service import TimesheetImageExtractor
+
 
 # AI Validation Prompt for flexible comparison
 AI_VALIDATION_PROMPT = """You are a helpful assistant that validates timesheet information with high flexibility.

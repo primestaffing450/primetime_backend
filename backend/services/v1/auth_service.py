@@ -8,10 +8,11 @@ from bson import ObjectId
 from passlib.context import CryptContext
 from pymongo.errors import DuplicateKeyError
 
-from app.core.config import settings
-from app.core.logging import logger
-from app.core.database import db
-from app.models.user import UserInDB, UserCreate
+from backend.core.v1.config import settings
+from backend.core.v1.logging import logger
+from backend.core.v1.database import db
+from backend.models.v1.user import UserInDB, UserCreate
+
 
 # Password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

@@ -1,4 +1,5 @@
-from app.core.logging import logger
+from backend.core.v1.logging import logger
+
 
 def merge_audit_info_into_week(week_data: dict, formatted_audit_logs: list) -> dict:
     """

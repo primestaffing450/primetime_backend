@@ -1,7 +1,9 @@
+import io
+
 import fitz  # PyMuPDF
 from PIL import Image
-import io
-from app.core.logging import logger
+
+from backend.core.v1.logging import logger
 
 def convert_pdf_to_image(pdf_bytes: bytes) -> bytes:
     """Convert first page of PDF to image bytes."""

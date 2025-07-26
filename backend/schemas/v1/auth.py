@@ -2,10 +2,12 @@
 Authentication schemas for request/response validation.
 """
 
-from typing import Optional
 from enum import Enum
+from typing import Optional
+
 from pydantic import BaseModel, EmailStr, Field
-from app.core.config import settings
+
+from backend.core.v1.config import settings
 
 class UserRole(str, Enum):
     employee = "employee"

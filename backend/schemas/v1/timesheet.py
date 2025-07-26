@@ -3,8 +3,9 @@ Pydantic models for timesheet data validation.
 """
 
 from datetime import date, datetime, time 
-from pydantic import BaseModel, Field, validator
 from typing import Dict, List, Optional, Union, Any
+
+from pydantic import BaseModel, Field, validator
 
 
 class TimesheetRecord(BaseModel):

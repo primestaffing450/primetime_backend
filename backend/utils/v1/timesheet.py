@@ -1,15 +1,17 @@
+from datetime import datetime, timezone, timedelta
+import os
+from pathlib import Path
 import re
 from typing import Optional, Dict
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, Depends, Request
-from app.utils.pdf_processing import convert_pdf_to_image
-from datetime import datetime, timezone, timedelta
-from app.core.database import db
-from app.core.logging import logger
-from app.core.config import settings
-from pathlib import Path
 import uuid
-import os
+
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, Depends, Request
 from fastapi import HTTPException
+
+from backend.core.v1.database import db
+from backend.core.v1.logging import logger
+from backend.core.v1.config import settings
+from backend.utils.v1.pdf_processing import convert_pdf_to_image
 
 
 

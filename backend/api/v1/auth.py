@@ -21,16 +21,16 @@ from backend.core.v1.security import (
     create_access_token,
     get_current_user,
 )
-from app.schemas.auth import UserRole
+from backend.schemas.v1.auth import UserRole
 from backend.core.v1.database import db
 from backend.core.v1.logging import logger
-from app.services.auth_service import (
+from backend.services.v1.auth_service import (
     authenticate_user,
     create_user,
     get_user_by_id,
     get_user_by_email,
 )
-from app.schemas.auth import (
+from backend.schemas.v1.auth import (
     UserCreate,
     UserResponse,
     Token,
@@ -39,7 +39,7 @@ from app.schemas.auth import (
     PasswordResetRequest,
     PasswordResetToken,
 )
-from app.services.password_reset_service import PasswordResetService
+from backend.services.v1.password_reset_service import PasswordResetService
 from starlette.status import HTTP_404_NOT_FOUND
 
 router = APIRouter()
