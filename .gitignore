@@ -1,0 +1,8 @@
+.env
+.venv
+venv
+test_venv
+require.txt
+__pycache__
+nohup.out
+uploads
