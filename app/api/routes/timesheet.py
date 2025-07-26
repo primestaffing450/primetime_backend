@@ -4,10 +4,10 @@ API routes for timesheet operations.
 
 import os
 from datetime import datetime, timezone
-from app.services.timesheet_services import validate_timesheet_image
+from app.services.timesheet_services import validate_timesheet_image, validate_timesheet_multiple_images
 from app.core.database import db
 from fastapi import APIRouter, File, HTTPException, UploadFile, Depends, Request
-from typing import Optional
+from typing import Optional, List
 from bson import ObjectId
 
 from datetime import datetime
@@ -17,7 +17,7 @@ from app.core.security import get_current_user
 from app.schemas.auth import UserResponse
 from app.utils.timesheet import get_week_boundaries_from_input, validate_weekday_dates
 from fastapi_jwt_auth import AuthJWT
-from app.utils.timesheet import parse_form_data, handle_image_upload
+from app.utils.timesheet import parse_form_data, handle_image_upload, handle_multiple_image_uploads
 
 
 router = APIRouter()
@@ -137,7 +137,9 @@ async def save_draft_timesheet(
 @router.post("/validate")
 async def validate_timesheet(
     request: Request,
-    image_file: Optional[UploadFile] = File(None, description="Timesheet image file"),
+    # Keep backward compatibility - accept both single and multiple files
+    image_file: Optional[UploadFile] = File(None, description="Single timesheet image file (legacy)"),
+    image_files: Optional[List[UploadFile]] = File(None, description="Multiple timesheet image files (new)"),
     current_user: UserResponse = Depends(get_current_user),
     Authorize: AuthJWT = Depends()
 ):
@@ -145,12 +147,23 @@ async def validate_timesheet(
         Authorize.jwt_required()
         if not current_user or not hasattr(current_user, "id"):
             raise HTTPException(status_code=401, detail="User not authenticated or invalid user data")
+        
         logger.info("Validating the timesheet_data")
         form = await request.form()
         logger.info(f"Validate Form Data {form}")
         daily_entries = parse_form_data(form=form)
-        file_path = await handle_image_upload(image_file=image_file)
-
+        
+        # Handle both single and multiple file scenarios
+        file_paths = []
+        if image_files:
+            # New multiple file upload
+            file_paths = await handle_multiple_image_uploads(image_files=image_files)
+        elif image_file:
+            # Legacy single file upload - maintain exact compatibility
+            single_path = await handle_image_upload(image_file=image_file)
+            if single_path:
+                file_paths = [single_path]
+        
         if daily_entries:
             # New submission or update
             entry_dates = []
@@ -174,21 +187,29 @@ async def validate_timesheet(
                 "week_end": week_end.isoformat()
             })
 
-            if not file_path:
+            # Handle file paths - prefer new uploads, fall back to existing
+            final_file_paths = file_paths if file_paths else []
+            
+            if not final_file_paths:
                 if existing_doc and "image_path" in existing_doc and existing_doc["image_path"]:
-                    # Use existing image if no new one provided and updating
-                    file_path = existing_doc["image_path"]
-                    logger.info(f"Using existing image at: {file_path}")
-                else:
-                    raise HTTPException(status_code=400, detail="No image available for validation and none provided")
+                    final_file_paths = [existing_doc["image_path"]]
+                    logger.info(f"Using existing single image: {final_file_paths}")
+                
+                if not final_file_paths:
+                    raise HTTPException(status_code=400, detail="No images available for validation and none provided")
 
             now = datetime.now(timezone.utc)
+            
+            # CRITICAL: Keep using image_path field for compatibility
+            primary_image_path = final_file_paths[0] if final_file_paths else None
+            
             if existing_doc:
-                # Update existing document
-                if image_file and existing_doc.get("image_path") and existing_doc["image_path"] != file_path:
+                # Clean up old files if new ones are provided
+                if file_paths and existing_doc.get("image_path"):
                     try:
-                        os.remove(existing_doc["image_path"])
-                        logger.info(f"Removed old image at: {existing_doc['image_path']}")
+                        if existing_doc["image_path"] not in final_file_paths:
+                            os.remove(existing_doc["image_path"])
+                            logger.info(f"Removed old image at: {existing_doc['image_path']}")
                     except Exception as e:
                         logger.error(f"Failed to remove old image: {str(e)}")
 
@@ -196,21 +217,23 @@ async def validate_timesheet(
                 for date_key, entry in daily_entries.items():
                     existing_entries[date_key] = entry
                 merged_entries = list(existing_entries.values())
+                
                 update_fields = {
                     "days": merged_entries,
                     "updated_at": now.isoformat(),
                     "is_draft": False,
                     "is_validated": False,  # Initial state before validation
                     "validation_results": {},
-                    "image_path": file_path
+                    "image_path": primary_image_path  # KEEP this field for compatibility
                 }
+                
                 db.db.timesheet_entries.update_one(
                     {"_id": existing_doc["_id"]},
                     {"$set": update_fields}
                 )
                 document_id = str(existing_doc["_id"])
             else:
-                # New document
+                # New document - KEEP using image_path field
                 daily_document = {
                     "user_id": str(current_user.id),
                     "week_start": week_start.isoformat(),
@@ -221,7 +244,7 @@ async def validate_timesheet(
                     "validation_results": {},
                     "created_at": now.isoformat(),
                     "updated_at": now.isoformat(),
-                    "image_path": file_path
+                    "image_path": primary_image_path  # KEEP this field
                 }
                 result = db.db.timesheet_entries.insert_one(daily_document)
                 document_id = str(result.inserted_id)
@@ -232,19 +255,29 @@ async def validate_timesheet(
                 raise HTTPException(status_code=500, detail="Failed to retrieve saved document")
             week_data["_id"] = str(week_data["_id"])
 
-            # Send submission confirmation email
+            # Send submission confirmation email - KEEP using single image_path
             email_service = EmailServices()
             await email_service.send_timesheet_submission_confirmation(
                 user_id=str(current_user.id),
-                timesheet_data=week_data["days"]
+                timesheet_data=week_data["days"],
+                image_path=primary_image_path  # Email service unchanged
             )
 
-            # Perform validation
-            validation_result = await validate_timesheet_image(
-                image_path=file_path,
-                current_user=current_user,
-                week_data=week_data
-            )
+            # Choose validation method based on number of files
+            if len(final_file_paths) == 1:
+                # Single image - use existing function (no changes needed)
+                validation_result = await validate_timesheet_image(
+                    image_path=final_file_paths[0],
+                    current_user=current_user,
+                    week_data=week_data
+                )
+            else:
+                # Multiple images - use new function
+                validation_result = await validate_timesheet_multiple_images(
+                    image_paths=final_file_paths,
+                    current_user=current_user,
+                    week_data=week_data
+                )
         
             # Update with validation results
             update_fields = {
@@ -260,30 +293,45 @@ async def validate_timesheet(
             return {
                 "message": "Final timesheet submitted and validated successfully",
                 "document_id": document_id,
-                "validation_result": validation_result
+                "validation_result": validation_result,
+                "files_processed": len(final_file_paths)
             }
         else:
-            # Validate existing most recent final entry
-
+            # Validate existing entry - UNCHANGED logic
+            print("#################################", current_user.id)
             most_recent_final_entry = db.db.timesheet_entries.find_one(
                 {"user_id": str(current_user.id), "is_draft": True},
                 sort=[("week_start", -1)]
             )
             if not most_recent_final_entry:
                 raise HTTPException(status_code=404, detail="No final timesheet found to validate")
-            # if "image_path" not in most_recent_final_entry or not most_recent_final_entry["image_path"]:
-            #     raise HTTPException(status_code=400, detail="No image available for validation")
 
             most_recent_final_entry["_id"] = str(most_recent_final_entry["_id"])
 
-            # Perform validation
-            validation_result = await validate_timesheet_image(
-                image_path=file_path,
-                current_user=current_user,
-                week_data=most_recent_final_entry
-            )
+            validation_file_paths = file_paths if file_paths else []
+            
+            if not validation_file_paths:
+                if "image_path" in most_recent_final_entry and most_recent_final_entry["image_path"]:
+                    validation_file_paths = [most_recent_final_entry["image_path"]]
+                    
+                if not validation_file_paths:
+                    raise HTTPException(status_code=400, detail="No images available for validation")
 
-            # Update validation results in database
+            # Choose validation method
+            if len(validation_file_paths) == 1:
+                validation_result = await validate_timesheet_image(
+                    image_path=validation_file_paths[0],
+                    current_user=current_user,
+                    week_data=most_recent_final_entry
+                )
+            else:
+                validation_result = await validate_timesheet_multiple_images(
+                    image_paths=validation_file_paths,
+                    current_user=current_user,
+                    week_data=most_recent_final_entry
+                )
+
+            # Update validation results
             update_fields = {
                 "is_validated": True,
                 "validation_results": validation_result["validation_results"],
@@ -296,7 +344,8 @@ async def validate_timesheet(
 
             return {
                 "message": "Validation performed on the most recent final timesheet",
-                "validation_result": validation_result
+                "validation_result": validation_result,
+                "files_processed": len(validation_file_paths)
             }
 
     except HTTPException as he:

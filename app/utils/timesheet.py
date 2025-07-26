@@ -338,6 +338,39 @@ async def handle_image_upload(image_file: Optional[UploadFile]) -> Optional[str]
     return None
 
 
+async def handle_multiple_image_uploads(image_files: Optional[list[UploadFile]]) -> list[str]:
+    """Handle multiple image uploads, process, and save them, returning the file paths."""
+    file_paths = []
+    
+    if not image_files:
+        return file_paths
+    
+    for idx, image_file in enumerate(image_files):
+        if image_file and image_file.filename:  # Check if file is not empty
+            try:
+                file_bytes = await image_file.read()
+                content_type = image_file.content_type
+                
+                if content_type.startswith("image/"):
+                    processed_bytes = file_bytes
+                elif content_type == "application/pdf":
+                    processed_bytes = convert_pdf_to_image(file_bytes)
+                else:
+                    logger.warning(f"Skipping file {idx + 1}: Invalid file type {content_type}")
+                    continue
+                
+                file_path = await save_image(processed_bytes)
+                file_paths.append(file_path)
+                logger.info(f"Image {idx + 1} saved at: {file_path}")
+                
+            except Exception as e:
+                logger.error(f"Error processing file {idx + 1}: {str(e)}")
+                # Continue processing other files even if one fails
+                continue
+    
+    logger.info(f"Successfully processed {len(file_paths)} out of {len(image_files)} files")
+    return file_paths
+
 
 def validate_weekday_dates(entry_dates: list[datetime]):
     """
