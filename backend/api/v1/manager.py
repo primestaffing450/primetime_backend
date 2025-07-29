@@ -444,6 +444,7 @@ async def export_all_weekly_timesheets_json(
         export_rows = []
         for weekly_entry in weekly_entries:
             weekly_entry["_id"] = str(weekly_entry["_id"])
+            print("^^^^^^^^^^^^^^^^^^^^^^^", weekly_entry)
             submitter = db.db.users.find_one({"_id": ObjectId(weekly_entry["user_id"])})
             if not submitter:
                 continue
@@ -465,13 +466,16 @@ async def export_all_weekly_timesheets_json(
                 "days": weekly_entry.get("days", [])
             }
 
-            week_data = merge_audit_info_into_week(week_data, formatted_audit_logs)
+            # week_data = merge_audit_info_into_week(week_data, formatted_audit_logs)
+            week_data = week_data
             overall_validation_status = formatted_audit_logs[0].get("comparison_results", {}).get("valid", False) if formatted_audit_logs else False
             ai_discrepancy = "Y" if not overall_validation_status else "N"
             date_submitted = weekly_entry.get("created_at", "")
-            image_path = weekly_entry.get("image_path", "")
+            
+            image_path = weekly_entry.get("image_path", [])
             if image_path:
-                image_path = os.getenv("BACKEND_URL") + f"/{image_path}"
+                if os.getenv("BACKEND_URL"):
+                    image_path = [os.getenv("BACKEND_URL") + f"/{x}" for x in image_path]
             
             for day in week_data["days"]:
                 row = {

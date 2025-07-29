@@ -506,11 +506,11 @@ async def validate_timesheet_multiple_images(image_paths: list[str], current_use
         "updated_at": datetime.now(timezone.utc).isoformat()
     }
     
-    # Store additional multiple image info in validation_results (not in separate field)
-    update_fields["validation_results"]["multiple_images_info"] = {
-        "image_paths": image_paths,
-        "processing_summary": comparison_results["processing_summary"]
-    }
+    # # Store additional multiple image info in validation_results (not in separate field)
+    # update_fields["validation_results"]["multiple_images_info"] = {
+    #     "image_paths": image_paths,
+    #     "processing_summary": comparison_results["processing_summary"]
+    # }
     
     db.db.timesheet_entries.update_one(
         {"_id": ObjectId(week_data["_id"])},
