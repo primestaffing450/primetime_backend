@@ -270,7 +270,7 @@ async def validate_timesheet(
         await email_service.send_timesheet_submission_confirmation(
             user_id=str(current_user.id),
             timesheet_data=week_data["days"],
-            image_path=final_file_paths  # Email service unchanged
+            # image_path=final_file_paths  # Email service unchanged
         )
 
         # Multiple images - use new function
