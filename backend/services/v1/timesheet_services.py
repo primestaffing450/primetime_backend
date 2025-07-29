@@ -93,6 +93,7 @@ def get_mismatch_details(record: Dict[str, Any], stored_day: Dict[str, Any]) -> 
 
         record_time_in = parse_time_extracted(record['time_in'])
         record_time_out = parse_time_extracted(record['time_out'])
+        print("############### record_time_in/out", record_time_in, record_time_out)
         
         # Helper function to parse stored time (supports AM/PM or 24-hour)
         # def parse_stored_time(t: str):
@@ -110,6 +111,8 @@ def get_mismatch_details(record: Dict[str, Any], stored_day: Dict[str, Any]) -> 
         stored_time_out = (parse_stored_time(stored_day["time_out"])
                            if isinstance(stored_day["time_out"], str)
                            else stored_day["time_out"].time())
+        print("################## stored_time_in/out", stored_time_in, stored_time_out)
+        
         
         # Normalize lunch timeout values
         record_lunch = normalize_lunch_timeout(str(record.get("lunch_timeout", "0")))
@@ -136,6 +139,21 @@ def get_mismatch_details(record: Dict[str, Any], stored_day: Dict[str, Any]) -> 
     except Exception as e:
         details.append(f"Error comparing record: {str(e)}")
     return details
+
+
+def normalize_date(date_str: str) -> str:
+    """
+    Convert MMDDYYYY to YYYYMMDD
+    """
+    formatted_date = None
+    try:
+        formatted_date = datetime.strptime(date_str, "%m-%d-%Y").strftime("%Y-%m-%d")
+        logger.info(f"###################### formatted_date: {formatted_date}")
+    except ValueError:
+        logger.info("Unable to convert the date to proper format.")
+        formatted_date = date_str
+        logger.info(f"###################### error while formatted_date: {formatted_date}")
+    return formatted_date
 
 
 
@@ -216,16 +234,15 @@ def compare_with_weekly_report(extracted_data: Dict[str, Any], previous_entries:
                 logger.warning(f"Missing date in record: {record}")
                 continue
 
-            try:
-                dt_record = datetime.strptime(record_date, "%m-%d-%Y")
-                formatted_record_date = dt_record.strftime("%Y-%m-%d")
-            except Exception as e:
-                formatted_record_date = record_date  # fallback
+            # try:
+            #     dt_record = datetime.strptime(record_date, "%m-%d-%Y")
+            #     formatted_record_date = dt_record.strftime("%Y-%m-%d")
+            #     print("################ date formatted", formatted_record_date)
+            # except Exception as e:
+            #     formatted_record_date = record_date  # fallback
+            #     print("################ date formatting error", formatted_record_date)
+            formatted_record_date = normalize_date(record_date)
             
-            # If the extracted record's date exists in stored_days, compare the times
-            # if record_date in stored_days:
-            #     stored_day = stored_days[record_date]
-            #     details = get_mismatch_details(record, stored_day)
             if formatted_record_date in stored_days:
                 stored_day = stored_days[formatted_record_date]
                 details = get_mismatch_details(record, stored_day)
@@ -434,6 +451,8 @@ async def validate_timesheet_multiple_images(image_paths: list[str], current_use
     
     if not all_extracted_data:
         raise HTTPException(status_code=500, detail=f"Failed to extract data from any images. Errors: {extraction_errors}")
+    
+    print("############# all extracted data", all_extracted_data)
     
     # Merge extracted data from all images
     merged_extracted_data = merge_multiple_extracted_data(all_extracted_data)

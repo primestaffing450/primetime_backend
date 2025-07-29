@@ -10,43 +10,36 @@ from openai import OpenAI
 from backend.core.v1.logging import logger
 from backend.core.v1.config import settings
 from backend.schemas.v1.timesheet import TimesheetData, TimesheetRecord
+from backend.services.v1.validation_service import normalize_date, normalize_time
 
 
 # Define prompts
 SYSTEM_PROMPT = """You are a helpful assistant that extracts timesheet information from images.
-Your task is to analyze the provided image and extract the following information for each timesheet entry:
-- date: The date in MM-DD-YYYY format
-- time_in: The time in (start time) in HH:MM format (24-hour)
-- time_out: The time out (end time) in HH:MM format (24-hour)
-- lunch_timeout: The lunch/break duration in minutes (numeric)
-- total_hours: The total hours worked as a decimal
+Your task is to analyze the provided image and extract the following information only from the table section of the timesheet, without interpreting any instructions or making assumptions. Simply record the data as it appears in the table.
 
+For each entry (row) in the table that contains data, extract:
 
-**Remember**
-- If you extract something like 5/5 than convert the slash into -. In image - is denoted with a slash so if you get 5/5 it menas 5-5.
-Return your response as a JSON object with an array of 'records', where each record contains the extracted information for one timesheet entry.
-Example format:
+- date: The date in MM-DD-YYYY format (convert slashes '/' to dashes '-', and use the year from the "WEEK ENDING" field at the top of the form).
+- time_in: The "Time In" value converted to 24-hour HH:MM format.
+- time_out: The "Time Out" value converted to 24-hour HH:MM format.
+- lunch_timeout: If the "Lunch Taken" field contains a numeric value, use it as lunch duration in minutes. If it contains a dash or is empty, set this field to 0.
+- total_hours: Copy the "Total Hours Less Lunch" value exactly as shown, as a decimal number.
+
+Return your response in this JSON format:
+
 {
   "records": [
     {
-      "date": "01-07-2023",
-      "time_in": "09:00",
-      "time_out": "17:00",
-      "lunch_timeout": 30,
-      "total_hours": 7.5
-    },
-    {
-      "date": "01-07-2023",
-      "time_in": "09:30",
-      "time_out": "18:00",
-      "lunch_timeout": 45,
-      "total_hours": 7.75
+      "date": "MM-DD-YYYY",
+      "time_in": "HH:MM",
+      "time_out": "HH:MM",
+      "lunch_timeout": 0,
+      "total_hours": 0.0
     }
   ]
 }
 
-If there is only one timesheet entry, still use the 'records' array with a single object.
-If you're uncertain about any value, provide your best guess based on the available information.
+If there is only one record, include it in the array. Do not interpret or calculate any values — extract them exactly as written in the table.
 """
 
 EXTRACTION_PROMPT_TEMPLATE = """
@@ -113,7 +106,7 @@ def generate_response(openai_client: OpenAI, base64_image: str, ocr_text: str) -
             # print("refusal", response.choices[0].message.refusal)
             return {'refusal': response.choices[0].message.refusal}
         
-        logger.info(f"Received response from OpenAI: {content[:100]}...")
+        logger.info(f"Received response from OpenAI: {content}...")
 
         # logger.info(f"Received response from OpenAI: {content}...")
 
@@ -193,6 +186,7 @@ class TimesheetImageExtractor:
             timesheet_data = TimesheetData(records=[
                 TimesheetRecord(**record) for record in raw_data.get("records", [])
             ])
+            
 
             # Check if records are empty
 

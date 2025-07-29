@@ -15,7 +15,7 @@ from backend.schemas.v1.timesheet import (
     SingleRecordValidation,
     MultipleRecordsValidation
 )
-from backend.services.v1.openai_service import TimesheetImageExtractor
+# from backend.services.v1.openai_service import TimesheetImageExtractor
 
 
 # AI Validation Prompt for flexible comparison
@@ -51,6 +51,17 @@ Return your response as a JSON object with:
     "explanation": "Detailed explanation of why the records match or don't match"
 }
 """
+
+
+def normalize_time(time_str: str) -> str:
+    # Convert string to datetime object
+    time_object = datetime.strptime(time_str, "%H:%M")
+
+    # Convert datetime object to 12-hour format
+    time_12hr = time_object.strftime("%I:%M %p")
+    
+    return time_12hr
+
 
 def normalize_date(date_str: str) -> str:
     """

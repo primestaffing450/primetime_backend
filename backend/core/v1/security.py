@@ -12,9 +12,10 @@ from fastapi_jwt_auth import AuthJWT
 from fastapi_jwt_auth.exceptions import AuthJWTException
 from passlib.context import CryptContext
 
+
 from backend.core.v1.config import settings
 from backend.core.v1.logging import logger
-from backend.schemas.v1.auth import UserRole
+from backend.schemas.v1.auth import UserRole, UserResponse
 from backend.services.v1.auth_service import get_user_by_id
 
 # Constants
@@ -100,7 +101,6 @@ async def get_current_user(
             "role": user.role
         }
         
-        from app.schemas.auth import UserResponse
         return UserResponse.parse_obj(user_dict)
         
     except AuthJWTException as e:
