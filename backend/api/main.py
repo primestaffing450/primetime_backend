@@ -16,11 +16,11 @@ import uvicorn
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 sys.path.append(str(BASE_DIR))
 
-
 from backend.api.v1.routers import api_router_v1
 from backend.core.v1.config import settings
 from backend.core.v1.logging import logger
 from backend.core.v1.database import db
+from backend.middleware.v1.staticfiles import CORSEnabledStaticFiles
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -56,7 +56,7 @@ UPLOAD_DIR = settings.IMAGE_DIR
 Path(UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
 
 # Mount the static files directory. Files in the "uploads" folder will be available at /uploads.
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+app.mount("/uploads", CORSEnabledStaticFiles(directory="uploads"), name="uploads")
 
 # Include API router
 app.include_router(api_router_v1, prefix="/api")

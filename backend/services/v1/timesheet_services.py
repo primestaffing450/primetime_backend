@@ -257,7 +257,7 @@ def compare_with_weekly_report(extracted_data: Dict[str, Any], previous_entries:
                             "lunch_timeout": stored_day.get("lunch_timeout"),
                             "total_hours": stored_day.get("total_hours")
                         },
-                        "details": details
+                        "details": "Discrepancies found between extracted and stored Timesheet entries"
                     })
                     comparison_results["valid"] = False
                     comparison_results["message"] = "Discrepancies found between extracted and stored Timesheet entries"
@@ -373,21 +373,6 @@ async def validate_timesheet_image(image_path: str, current_user: UserResponse, 
             "updated_at": datetime.now(timezone.utc).isoformat()
         }}
     )
-
-    # Store audit log
-    audit_additional_info = {
-        "note": "Weekly timesheet validation",
-        "week_data": week_data,
-        "image_path": image_path,
-        "content_type": "image/png"
-    }
-    audit_id = store_audit_log(
-        user_id=str(current_user.id),
-        extracted_data=extracted_result["data"],
-        comparison_results=comparison_results,
-        additional_info=audit_additional_info
-    )
-    logger.info(f"Audit log stored with ID: {audit_id}")
 
     return {
         "message": "File processed and validated successfully",
@@ -518,20 +503,20 @@ async def validate_timesheet_multiple_images(image_paths: list[str], current_use
     )
 
     # Store audit log with multiple images info
-    audit_additional_info = {
-        "note": "Weekly timesheet validation with multiple images",
-        "week_data": week_data,
-        "image_paths": image_paths,
-        "content_type": "multiple_images",
-        "processing_summary": comparison_results["processing_summary"]
-    }
-    audit_id = store_audit_log(
-        user_id=str(current_user.id),
-        extracted_data=merged_extracted_data,
-        comparison_results=comparison_results,
-        additional_info=audit_additional_info
-    )
-    logger.info(f"Audit log stored with ID: {audit_id}")
+    # audit_additional_info = {
+    #     "note": "Weekly timesheet validation with multiple images",
+    #     "week_data": week_data,
+    #     "image_paths": image_paths,
+    #     "content_type": "multiple_images",
+    #     "processing_summary": comparison_results["processing_summary"]
+    # }
+    # audit_id = store_audit_log(
+    #     user_id=str(current_user.id),
+    #     extracted_data=merged_extracted_data,
+    #     comparison_results=comparison_results,
+    #     additional_info=audit_additional_info
+    # )
+    # logger.info(f"Audit log stored with ID: {audit_id}")
 
     return {
         "message": "Multiple files processed and validated successfully",

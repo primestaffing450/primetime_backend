@@ -66,11 +66,9 @@ async def save_draft_timesheet(
         
         try:
             week_start, week_end = get_week_boundaries_from_input(entry_dates)
+            print("##############", week_start, week_end)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e))
-
-        # file_path = await handle_image_upload(image_files)
-        # print("###########################", image_files, file_path)
 
         now = datetime.now(timezone.utc)
 
@@ -103,12 +101,7 @@ async def save_draft_timesheet(
                 "updated_at": now.isoformat(),
                 "is_draft": True,
             }
-            # if file_path:
-            #     update_fields["image_path"] = file_path
-            # else:
-            #     # Preserve existing image_path if no new image provided
-            #     if "image_path" in existing_doc:
-            #         update_fields["image_path"] = existing_doc["image_path"]
+            
             db.db.timesheet_entries.update_one(
                 {"_id": existing_doc["_id"]},
                 {"$set": update_fields}

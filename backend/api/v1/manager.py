@@ -180,7 +180,7 @@ async def get_monthly_timesheets(
     current_user=Depends(verify_manager_role)
 ):
     """
-    Get validated timesheet entries for a specific month (current month if not provided) from audit logs.
+    Get validated timesheet entries for a specific month (current month if not provided).
     The response returns:
       - user_info
       - month_info (year, month, start_date, end_date)
@@ -216,74 +216,59 @@ async def get_monthly_timesheets(
         start_date_str = start_date.isoformat()
         end_date_str = end_date.isoformat()
 
-        # Query audit logs for validated weeks where week_start is within the selected month
-        # audit_query = {
-        #     "user_id": user_id,
-        #     "additional_info.week_data.week_start": {"$gte": start_date_str, "$lt": end_date_str}
-        # }
-
-
-        audit_query = {
+        # Query timesheet entries where week_start or week_end falls within the month
+        timesheet_query = {
             "user_id": user_id,
-            "additional_info.week_data.week_end": {"$gt": start_date_str},
-            "additional_info.week_data.week_start": {"$lt": end_date_str}
+            "week_end": {"$gt": start_date_str},
+            "week_start": {"$lt": end_date_str}
         }
 
-
-        audit_logs = list(db.db.timesheet_audit.find(audit_query).sort("timestamp", -1))
-        logger.info(f"Found {len(audit_logs)} audit logs for weeks starting in the month")
-
-        # Group by week_id and take the most recent validation for each week
-        audit_by_week = {}
-        for audit in audit_logs:
-            try:
-                week_id = str(audit["additional_info"]["week_data"]["_id"])
-                if week_id not in audit_by_week or audit["timestamp"] > audit_by_week[week_id]["timestamp"]:
-                    audit_by_week[week_id] = audit
-            except Exception as e:
-                logger.error(f"Error processing audit log for grouping: {e}")
-
-
-        # Add current week details
-        from datetime import timedelta
-        current_date = datetime.now(timezone.utc)
-        current_monday = current_date - timedelta(days=current_date.weekday())
-        current_week_start_str = current_monday.isoformat()
-
-        # Check if current week is already in the audit logs.
-        if not any(audit["additional_info"]["week_data"]["week_start"] == current_week_start_str 
-                   for audit in audit_by_week.values()):
-            # Attempt to fetch the current week audit log.
-            current_week_audit = db.db.timesheet_audit.find_one({
-                "user_id": user_id,
-                "additional_info.week_data.week_start": current_week_start_str
-            })
-            if current_week_audit:
-                week_id = str(current_week_audit["additional_info"]["week_data"]["_id"])
-                audit_by_week[week_id] = current_week_audit
-                logger.info("Added current week audit log from audit collection.")
-            else:
-                logger.info("Current week audit log not found in audit logs.")
+        timesheet_entries = list(db.db.timesheet_entries.find(timesheet_query).sort("week_start", -1))
+        logger.info(f"Found {len(timesheet_entries)} timesheet entries for the month")
 
         # Build weekly summaries
         weekly_summaries = []
-        for week_id, audit_log in audit_by_week.items():
-            week_data = audit_log["additional_info"]["week_data"]
-            comparison_results = audit_log.get("comparison_results", {"valid": False})
-            last_validated_at = audit_log["timestamp"].isoformat() if isinstance(audit_log["timestamp"], datetime) else str(audit_log["timestamp"])
+        for entry in timesheet_entries:
+            validation_results = entry.get("validation_results", {})
+            last_validated_at = entry.get("updated_at", entry.get("created_at", ""))
+            if isinstance(last_validated_at, datetime):
+                last_validated_at = last_validated_at.isoformat()
 
             summary_obj = {
-                "week_id": week_id,
-                "week_start": week_data["week_start"],
-                "week_end": week_data["week_end"],
-                "validation_status": comparison_results.get("valid", False),
+                "week_id": str(entry["_id"]),
+                "week_start": entry["week_start"],
+                "week_end": entry["week_end"],
+                "validation_status": validation_results.get("valid", False),
                 "last_validated_at": last_validated_at
             }
             weekly_summaries.append(summary_obj)
 
+        # Add current week if not already included
+        current_monday = current_date - timedelta(days=current_date.weekday())
+        current_week_start_str = current_monday.isoformat()
+
+        if not any(summary["week_start"] == current_week_start_str for summary in weekly_summaries):
+            current_week_entry = db.db.timesheet_entries.find_one({
+                "user_id": user_id,
+                "week_start": current_week_start_str
+            })
+            if current_week_entry:
+                validation_results = current_week_entry.get("validation_results", {})
+                last_validated_at = current_week_entry.get("updated_at", current_week_entry.get("created_at", ""))
+                if isinstance(last_validated_at, datetime):
+                    last_validated_at = last_validated_at.isoformat()
+
+                weekly_summaries.append({
+                    "week_id": str(current_week_entry["_id"]),
+                    "week_start": current_week_entry["week_start"],
+                    "week_end": current_week_entry["week_end"],
+                    "validation_status": validation_results.get("valid", False),
+                    "last_validated_at": last_validated_at
+                })
+
         overall_summary = {
-            "total_timesheets": len(weekly_summaries),  # Count of validated weeks
-            "total_audits": len(audit_logs)
+            "total_timesheets": len(weekly_summaries),
+            "total_entries": sum(len(entry.get("days", [])) for entry in timesheet_entries)
         }
 
         return {
@@ -349,41 +334,48 @@ async def get_weekly_timesheet(
             "user_id": weekly_entry["user_id"],
             "additional_info.week_data._id": week_id
         }
-        audit_logs = list(db.db.timesheet_audit.find(audit_query).sort("timestamp", -1))
-        print("$$$$$")
+        validation_results = weekly_entry.get("validation_results")
+        image = weekly_entry.get("image_path")
+        overall_validation_status = validation_results.get('valid', False)
         
-        if audit_logs:
-            most_recent_audit = audit_logs[0]
-            most_recent_audit["_id"] = str(most_recent_audit["_id"])
-            comparison_results = most_recent_audit.get("comparison_results", {})
-            image = most_recent_audit.get("additional_info", {}).get("image_path")
-            overall_validation_status = comparison_results.get("valid", False)
+        
+        # Process validation info
+        mismatched = {entry["date"]: entry for entry in validation_results.get("mismatched_entries", [])}
+        missing = {entry["date"]: entry for entry in validation_results.get("missing_entries", [])}
+        stored_missing = {entry["date"]: entry for entry in validation_results.get("stored_missing_entries", [])}
+        
+        print("mismatched", mismatched)
+        print('missing', missing)
+        print("stored_missing", stored_missing)
+        
+        def _normalize_date(date_str):
+            return datetime.strptime(date_str, "%Y-%m-%d").strftime("%m-%d-%Y")
+        
+        # Add validation info to each day
+        for day in week_data["days"]:
+            day_date = day.get("date", "")[:10]
+            # day_date = datetime.strptime(day_date, "%Y-%m-%d").strftime("%m-%d-%Y")
+            print("?????", day_date)
+            ai_status = "approved"
+            reason = "All fields match."
             
-            # Process validation info
-            mismatched = {entry["date"]: entry for entry in comparison_results.get("mismatched_entries", [])}
-            missing = {entry["date"]: entry for entry in comparison_results.get("missing_entries", [])}
-            stored_missing = {entry["date"]: entry for entry in comparison_results.get("stored_missing_entries", [])}
+            if _normalize_date(day_date) in mismatched:
+                # ai_status = "not approved"
+                ai_status = "missing from image"
+                # reason = "; ".join(mismatched[day_date].get("details", []))
+                reason = "Discrepancies found between extracted and stored Timesheet entries"
+            elif _normalize_date(day_date) in missing:
+                ai_status = "missing from stored data"
+                reason = "; ".join(missing[day_date].get("details", []))
+            elif day_date in stored_missing:
+                ai_status = "missing from image"
+                reason = "; ".join(stored_missing[day_date].get("details", []))
             
-            # Add validation info to each day
-            for day in week_data["days"]:
-                day_date = day.get("date", "")[:10]
-                ai_status = "approved"
-                reason = "All fields match."
-                
-                if day_date in mismatched:
-                    ai_status = "not approved"
-                    reason = "; ".join(mismatched[day_date].get("details", []))
-                elif day_date in missing:
-                    ai_status = "missing from stored data"
-                    reason = "; ".join(missing[day_date].get("details", []))
-                elif day_date in stored_missing:
-                    ai_status = "missing from image"
-                    reason = "; ".join(stored_missing[day_date].get("details", []))
-                
-                day["ai_validation_info"] = {"status": ai_status, "reason": reason}
-        else:
-            image = None
-            overall_validation_status = False
+            day["ai_validation_info"] = {"status": ai_status, "reason": reason}
+        # else:
+        #     image = None
+        #     overall_validation_status = False
+            
             
         return {
             "week_data": week_data,
@@ -444,21 +436,13 @@ async def export_all_weekly_timesheets_json(
         export_rows = []
         for weekly_entry in weekly_entries:
             weekly_entry["_id"] = str(weekly_entry["_id"])
-            print("^^^^^^^^^^^^^^^^^^^^^^^", weekly_entry)
             submitter = db.db.users.find_one({"_id": ObjectId(weekly_entry["user_id"])})
             if not submitter:
                 continue
 
             submitter_name = submitter.get("full_name")
             submitter_email = submitter.get("email")
-            print(submitter_email)
-            audit_query = {
-                "user_id": weekly_entry["user_id"],
-                "additional_info.week_data._id": weekly_entry["_id"]
-            }
-            audit_logs = list(db.db.timesheet_audit.find(audit_query).sort("timestamp", -1))
-            formatted_audit_logs = [{"_id": str(al["_id"]), **al} for al in audit_logs]
-            print(audit_logs)
+            
             week_data = {
                 "week_id": weekly_entry["_id"],
                 "week_start": weekly_entry["week_start"],
@@ -466,16 +450,12 @@ async def export_all_weekly_timesheets_json(
                 "days": weekly_entry.get("days", [])
             }
 
-            # week_data = merge_audit_info_into_week(week_data, formatted_audit_logs)
-            week_data = week_data
-            overall_validation_status = formatted_audit_logs[0].get("comparison_results", {}).get("valid", False) if formatted_audit_logs else False
-            ai_discrepancy = "Y" if not overall_validation_status else "N"
+            # Get validation status from timesheet entry
+            validation_results = weekly_entry.get("validation_results", {})
+            ai_discrepancy = "Y" if not validation_results.get("valid", False) else "N"
             date_submitted = weekly_entry.get("created_at", "")
             
             image_path = weekly_entry.get("image_path", [])
-            if image_path:
-                if os.getenv("BACKEND_URL"):
-                    image_path = [os.getenv("BACKEND_URL") + f"/{x}" for x in image_path]
             
             for day in week_data["days"]:
                 row = {
@@ -544,12 +524,12 @@ async def delete_weekly_timesheet(
             )
         
         # Delete associated audit logs
-        audit_delete_result = db.db.timesheet_audit.delete_many({
-            "user_id": timesheet["user_id"],
-            "additional_info.week_data._id": week_id
-        })
+        # audit_delete_result = db.db.timesheet_audit.delete_many({
+        #     "user_id": timesheet["user_id"],
+        #     "additional_info.week_data._id": week_id
+        # })
         
-        logger.info(f"Successfully deleted weekly timesheet {week_id} for user {user_name} by manager {current_user.full_name}")
+        # logger.info(f"Successfully deleted weekly timesheet {week_id} for user {user_name} by manager {current_user.full_name}")
         
         return {
             "message": "Weekly timesheet deleted successfully",
@@ -559,8 +539,8 @@ async def delete_weekly_timesheet(
             "week_end": timesheet.get("week_end"),
             "deleted_by": current_user.full_name,
             "deleted_at": datetime.now(timezone.utc).isoformat(),
-            "audit_logs_deleted": audit_delete_result.deleted_count,
-            "image_deleted": bool(image_path and os.path.exists(image_path))
+            # "audit_logs_deleted": audit_delete_result.deleted_count,
+            "image_deleted": all([img and os.path.exists(img) for img in image_path])
         }
         
     except HTTPException as he:
