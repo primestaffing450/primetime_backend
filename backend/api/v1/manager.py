@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timezone
+from traceback import format_exc
 from typing import Optional
 
 from bson import ObjectId
@@ -245,7 +246,8 @@ async def get_monthly_timesheets(
                 "validation_status": validation_results.get("valid", False),
                 "last_validated_at": last_validated_at
             }
-            weekly_summaries.append(summary_obj)
+            if entry['submitted'] == True:
+                weekly_summaries.append(summary_obj)
 
         # Add current week if not already included
         current_monday = current_date - timedelta(days=current_date.weekday())
@@ -564,9 +566,11 @@ async def delete_weekly_timesheet(
         }
         
     except HTTPException as he:
+        print(format_exc())
         logger.error(f"HTTP Exception in delete_weekly_timesheet: {str(he)}")
         raise he
     except Exception as e:
+        print(format_exc())
         logger.error(f"Error deleting weekly timesheet: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
