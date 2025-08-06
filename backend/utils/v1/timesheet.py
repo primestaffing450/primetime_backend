@@ -171,10 +171,9 @@ def parse_time_format(time_str: str) -> str:
 
 def get_week_boundaries_from_input(day_dates: list) -> (datetime, datetime):
     """
-    Given a list of datetime objects, compute week boundaries (Monday to Friday).
-    If exactly two dates are provided and at least one is a Saturday or Sunday,
-    return the next week's Monday and Friday. Otherwise, return the Monday and
-    Friday of the earliest date's week. Boundaries are set to midnight UTC.
+    Given a list of datetime objects, compute week boundaries (Sunday to Saturday).
+    Returns the Sunday and Saturday of the earliest date's week. 
+    Boundaries are set to midnight UTC.
     """
     if not day_dates:
         raise ValueError("No day dates provided.")
@@ -185,34 +184,62 @@ def get_week_boundaries_from_input(day_dates: list) -> (datetime, datetime):
     # Find the earliest date
     base_date = min(day_dates)
     
-    # Compute Monday of the base_date's week and set to midnight UTC
-    monday = base_date - timedelta(days=base_date.weekday())
-    monday = monday.replace(hour=0, minute=0, second=0, microsecond=0)
+    # Compute Sunday of the base_date's week and set to midnight UTC
+    # Sunday is weekday 6, so we need to go back (base_date.weekday() + 1) % 7 days
+    days_to_sunday = (base_date.weekday() + 1) % 7
+    sunday = base_date - timedelta(days=days_to_sunday)
+    sunday = sunday.replace(hour=0, minute=0, second=0, microsecond=0)
     
-    # If exactly two dates and at least one is Saturday (5) or Sunday (6), shift to next week
-    if any(date.weekday() in [5, 6] for date in day_dates):
-        monday += timedelta(days=7)
+    # Compute Saturday of that week (Sunday + 6 days)
+    saturday = sunday + timedelta(days=6)
     
-    # Compute Friday of that week
-    friday = monday + timedelta(days=4)
-    
-    return monday, friday
+    return sunday, saturday
 
 
+def get_previous_week_boundaries_from_input(day_dates: list) -> (datetime, datetime):
+    """
+    Given a list of datetime objects, compute week boundaries for the PREVIOUS week (Sunday to Saturday).
+    Returns the Sunday and Saturday of the week BEFORE the earliest date's week. 
+    Boundaries are set to midnight UTC.
+    """
+    if not day_dates:
+        raise ValueError("No day dates provided.")
+    
+    # Ensure all dates are timezone-aware (UTC)
+    day_dates = [dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc) for dt in day_dates]
+    
+    # Find the earliest date
+    base_date = min(day_dates)
+    
+    # Compute Sunday of the base_date's week and set to midnight UTC
+    # Sunday is weekday 6, so we need to go back (base_date.weekday() + 1) % 7 days
+    days_to_sunday = (base_date.weekday() + 1) % 7
+    current_week_sunday = base_date - timedelta(days=days_to_sunday)
+    current_week_sunday = current_week_sunday.replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # Get the PREVIOUS week's Sunday (subtract 7 days from current week's Sunday)
+    previous_week_sunday = current_week_sunday - timedelta(days=7)
+    
+    # Compute Saturday of the previous week (Sunday + 6 days)
+    previous_week_saturday = previous_week_sunday + timedelta(days=6)
+    
+    return previous_week_sunday, previous_week_saturday
 
 
 def get_first_and_last_weekdays_of_month(base_date: datetime):
     """
-    Given a base date, return the first Monday and last Friday of that month.
+    Given a base date, return the first Sunday and last Saturday of that month.
     """
     year = base_date.year
     month = base_date.month
 
     # First day of the month
     first_day = datetime(year, month, 1, tzinfo=base_date.tzinfo)
-    # Calculate first Monday (Monday = 0)
-    days_to_monday = (0 - first_day.weekday()) % 7
-    first_monday = first_day + timedelta(days=days_to_monday)
+    # Calculate first Sunday (Sunday = 6)
+    days_to_sunday = (6 - first_day.weekday()) % 7
+    if days_to_sunday == 0 and first_day.weekday() != 6:
+        days_to_sunday = 7
+    first_sunday = first_day + timedelta(days=days_to_sunday)
 
     # Last day of the month
     if month == 12:
@@ -220,11 +247,11 @@ def get_first_and_last_weekdays_of_month(base_date: datetime):
     else:
         next_month = datetime(year, month + 1, 1, tzinfo=base_date.tzinfo)
     last_day = next_month - timedelta(days=1)
-    # Calculate last Friday (Friday = 4)
-    days_from_friday = (last_day.weekday() - 4) % 7
-    last_friday = last_day - timedelta(days=days_from_friday)
+    # Calculate last Saturday (Saturday = 5)
+    days_from_saturday = (last_day.weekday() - 5) % 7
+    last_saturday = last_day - timedelta(days=days_from_saturday)
 
-    return first_monday, last_friday
+    return first_sunday, last_saturday
 
 
 def get_week_boundaries_in_month(reference_date: datetime):
@@ -376,18 +403,36 @@ async def handle_multiple_image_uploads(image_files: Optional[list[UploadFile]])
 
 def validate_weekday_dates(entry_dates: list[datetime]):
     """
-    Validate that none of the provided dates fall on a Saturday or Sunday.
-    Raises an HTTPException if any date is on a weekend.
+    Since we now use Sunday-Saturday weeks, all days are valid.
+    This function can be removed or used for other validation.
+    """
+    # No validation needed for Sunday-Saturday weeks
+    pass
+
+
+def is_date_within_week_boundary(date: datetime, week_start: datetime, week_end: datetime) -> bool:
+    """
+    Check if a single date falls within the given week boundaries (inclusive).
     
     Args:
-        entry_dates (list[datetime]): List of datetime objects representing entry dates.
+        date: The date to check
+        week_start: Start of the week (Sunday)
+        week_end: End of the week (Saturday)
     
-    Raises:
-        HTTPException: If a date falls on a Saturday or Sunday, with status code 400 and a descriptive message.
+    Returns:
+        bool: True if date is within boundaries, False otherwise
     """
-    for date in entry_dates:
-        if date.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
-            raise HTTPException(
-                status_code=400,
-                detail=f"Entries for weekends (Saturday and Sunday) are not allowed. Invalid date: {date.strftime('%Y-%m-%d')}"
-            )
+    # Ensure all dates are timezone-aware
+    if date.tzinfo is None:
+        date = date.replace(tzinfo=timezone.utc)
+    if week_start.tzinfo is None:
+        week_start = week_start.replace(tzinfo=timezone.utc)
+    if week_end.tzinfo is None:
+        week_end = week_end.replace(tzinfo=timezone.utc)
+    
+    # Compare dates only (ignore time components)
+    date_only = date.date()
+    start_only = week_start.date()
+    end_only = week_end.date()
+    
+    return start_only <= date_only <= end_only

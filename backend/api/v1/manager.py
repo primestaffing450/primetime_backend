@@ -21,6 +21,10 @@ from backend.schemas.v1.manager import (
 from backend.schemas.v1.auth import UserResponse
 from backend.schemas.v1.timesheet import TimesheetUpdate
 from backend.services.v1.notification_services import EmailServices
+from backend.utils.v1.timesheet import (
+    get_week_boundaries_from_input,
+    get_previous_week_boundaries_from_input
+)
 
 router = APIRouter()
 
@@ -420,16 +424,32 @@ async def export_all_weekly_timesheets_json(
     If no dates are provided, it defaults to the last full week (Monday–Sunday).
     """
     now = datetime.now(timezone.utc)
-    last_monday = (now - timedelta(days=now.weekday() + 7)).replace(hour=0, minute=0, second=0, microsecond=0)
-    last_friday = last_monday + timedelta(days=4)
-    
+    # last_monday = (now - timedelta(days=now.weekday() + 7)).replace(hour=0, minute=0, second=0, microsecond=0)
+    # last_friday = last_monday + timedelta(days=4)
+    sunday, saturday = get_previous_week_boundaries_from_input([now])
     # Query for last week's Monday to Friday data only
     query = {
-        "week_start": last_monday.isoformat(),
-        "week_end": last_friday.isoformat()
+        "week_start": sunday.isoformat(),
+        "week_end": saturday.isoformat()
     }
-    
+    print("##############", query)
     weekly_entries = list(db.db.timesheet_entries.find(query).sort("week_start", 1))
+    print("???????????? 7 days", weekly_entries)
+    
+    # check for 5 days schedule
+    if not weekly_entries:
+        monday = sunday + timedelta(days=1)
+        friday = saturday - timedelta(days=1)
+        query = {
+            "week_start": monday.isoformat(),
+            "week_end": friday.isoformat()
+        }
+        print("##############", query)
+        weekly_entries = list(db.db.timesheet_entries.find(query).sort("week_start", 1))
+        print("???????????? 5 days", weekly_entries)
+        
+    print("############# weekly entries", len(weekly_entries))
+    
     if not weekly_entries:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No weekly timesheets found")
     try:

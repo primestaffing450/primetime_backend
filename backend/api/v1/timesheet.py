@@ -25,8 +25,14 @@ from backend.core.v1.security import get_current_user
 from backend.services.v1.notification_services import EmailServices
 from backend.services.v1.timesheet_services import validate_timesheet_image, validate_timesheet_multiple_images
 from backend.schemas.v1.auth import UserResponse
-from backend.utils.v1.timesheet import get_week_boundaries_from_input, validate_weekday_dates
-from backend.utils.v1.timesheet import parse_form_data, handle_image_upload, handle_multiple_image_uploads
+from backend.utils.v1.timesheet import (
+    get_week_boundaries_from_input,
+    validate_weekday_dates,
+    handle_multiple_image_uploads,
+    handle_image_upload,
+    is_date_within_week_boundary,
+    parse_form_data, 
+)
 
 
 router = APIRouter()
@@ -82,7 +88,8 @@ async def save_draft_timesheet(
             "validation_results": {},
             "created_at": now.isoformat(),
             "updated_at": now.isoformat(),
-            "image_path": None
+            "image_path": None,
+            "submitted": False
         }
 
         existing_doc = db.db.timesheet_entries.find_one({
@@ -92,6 +99,12 @@ async def save_draft_timesheet(
         })
 
         if existing_doc:
+            if existing_doc['submitted'] == True:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail='Timesheet for this week is already submitted'
+                )
+            
             existing_entries = {entry["date"]: entry for entry in existing_doc.get("days", [])}
             for date_key, entry in daily_entries.items():
                 existing_entries[date_key] = entry
@@ -188,6 +201,12 @@ async def validate_timesheet(
             "week_start": week_start.isoformat(),
             "week_end": week_end.isoformat()
         })
+        
+        if existing_doc['submitted'] == True:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Timesheet for this week is already submitted."
+            )
 
         # Handle file paths - prefer new uploads, fall back to existing
         final_file_paths = file_paths
@@ -206,14 +225,15 @@ async def validate_timesheet(
         primary_image_path = None
         
         if existing_doc:
-            # Clean up old files if new ones are provided
+            # Append the new files with old ones.
             if file_paths and existing_doc.get("image_path"):
-                try:
-                    if existing_doc["image_path"] not in final_file_paths:
-                        os.remove(existing_doc["image_path"])
-                        logger.info(f"Removed old image at: {existing_doc['image_path']}")
-                except Exception as e:
-                    logger.error(f"Failed to remove old image: {str(e)}")
+                final_file_paths = existing_doc['image_path'] + final_file_paths
+                # try:
+                #     if existing_doc["image_path"] not in final_file_paths:
+                #         os.remove(existing_doc["image_path"])
+                #         logger.info(f"Removed old image at: {existing_doc['image_path']}")
+                # except Exception as e:
+                #     logger.error(f"Failed to remove old image: {str(e)}")
 
             existing_entries = {entry["date"]: entry for entry in existing_doc.get("days", [])}
             for date_key, entry in daily_entries.items():
@@ -226,7 +246,8 @@ async def validate_timesheet(
                 "is_draft": False,
                 "is_validated": False,  # Initial state before validation
                 "validation_results": {},
-                "image_path": final_file_paths,  # KEEP this field for compatibility,
+                "image_path": final_file_paths,  # KEEP this field for compatibility,,  # KEEP this field
+                "submitted": True
                 # "image_path": final_file_paths
             }
             
@@ -247,7 +268,8 @@ async def validate_timesheet(
                 "validation_results": {},
                 "created_at": now.isoformat(),
                 "updated_at": now.isoformat(),
-                "image_path": final_file_paths  # KEEP this field
+                "image_path": final_file_paths,  # KEEP this field
+                "submitted": True
             }
             result = db.db.timesheet_entries.insert_one(daily_document)
             document_id = str(result.inserted_id)
