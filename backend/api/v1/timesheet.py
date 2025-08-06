@@ -196,13 +196,16 @@ async def validate_timesheet(
         # validate_weekday_dates(entry_dates)
 
         week_start, week_end = get_week_boundaries_from_input(entry_dates)
+        print("################ validate week boundary", week_start, week_end)
         existing_doc = db.db.timesheet_entries.find_one({
             "user_id": str(current_user.id),
             "week_start": week_start.isoformat(),
             "week_end": week_end.isoformat()
         })
         
-        if existing_doc['submitted'] == True:
+        # check if the timesheet is already submit.
+        # and timesheet already exists.
+        if existing_doc is not None and existing_doc['submitted'] == True:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Timesheet for this week is already submitted."
