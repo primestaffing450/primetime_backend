@@ -488,6 +488,7 @@ async def export_all_weekly_timesheets_json(
                     "date_worked": day.get("date"),
                     "time_in": day.get("time_in"),
                     "time_out": day.get("time_out"),
+                    "night": day.get("night_shift"),
                     "lunch": day.get("lunch_timeout"),
                     "total_daily_hours": day.get("total_hours"),
                     "notes": day.get("notes", ""),

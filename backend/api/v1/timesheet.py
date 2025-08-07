@@ -5,13 +5,18 @@ API routes for timesheet operations.
 from datetime import datetime, timezone
 import os
 from traceback import format_exc
-from typing import Optional, List
+from typing import (
+    Annotated,
+    List,
+    Optional
+)
 
 from bson import ObjectId
 from fastapi import (
     APIRouter,
     Depends, 
-    File, 
+    File,
+    Form,
     HTTPException, 
     Request,
     status, 
@@ -54,7 +59,19 @@ async def save_draft_timesheet(
         logger.info(f"form data {form}")
 
         daily_entries = parse_form_data(form=form)
+        today_key = list(daily_entries.keys())[0]
+        print("################### My current key:", today_key)
+        if "night_shift" not in daily_entries[today_key].keys():
+            daily_entries[today_key]['night_shift'] = "false"
         logger.info(f"Daily Entry Data is {daily_entries}")
+        
+        # Extract night_shift from the daily entries
+        # night_shift_values = []
+        # for date_key, entry in daily_entries.items():
+        #     night_shift = entry.get('night_shift', 'false')
+        #     night_shift_values.append(night_shift)
+        #     print(f"#################### night_shift for {date_key}: {night_shift}")
+        
 
         if image_files:
             raise HTTPException(
@@ -67,7 +84,7 @@ async def save_draft_timesheet(
 
         entry_dates = [
             datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-            for date_str in daily_entries.keys()
+            for date_str in daily_entries.keys() if date_str != "night_shift"
         ]
         
         try:
@@ -146,9 +163,11 @@ async def save_draft_timesheet(
         }
 
     except HTTPException as he:
+        print(format_exc())
         logger.error(f"HTTP Exception: {str(he)}")
         raise he
     except Exception as e:
+        print(format_exc())
         logger.error(f"Error in save_draft_timesheet: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
@@ -386,6 +405,7 @@ def get_dates_from_timesheets_draft(user_id: str):
                         
         return entries
     except Exception as e:
+        print(format_exc())
         raise HTTPException(status_code=500, detail=str(e))
 
 
