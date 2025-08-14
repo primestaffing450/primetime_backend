@@ -324,17 +324,53 @@ async def delete_user_account(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
+            
+        if user.get("role") == "manager":
+            body = await request.json()
+            employee_id = body.get("employee_id")
+            
+            if employee_id == current_user.id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Manager cannot be deleted."
+                )
+            
+            if not employee_id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid employee credentials"
+                )
+                
+            employee_id = ObjectId(employee_id)
+            employee = db.db.users.find_one({"_id": employee_id})
+            if not employee:
+                logger.warning(f"User not found for deletion: {current_user.username}")
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Employee not found"
+                )
+                
+            result = db.db.users.delete_one({"_id": employee_id})
+            if result.deleted_count == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to delete employee"
+                )
+                
+            logger.info(f"Employee delete: {employee.get("username")}")
+            return {"message": "Employee account delete successfully"}
+        else:
+            
+            # Delete user
+            result = db.db.users.delete_one({"_id": user_id})
+            if result.deleted_count == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to delete user"
+                )
 
-        # Delete user
-        result = db.db.users.delete_one({"_id": user_id})
-        if result.deleted_count == 0:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to delete user"
-            )
-
-        logger.info(f"User deleted: {current_user.username}")
-        return {"message": "User account deleted successfully"}
+            logger.info(f"User deleted: {current_user.username}")
+            return {"message": "User account deleted successfully"}
     
     except Exception as e:
         logger.error(f"Error deleting user account: {str(e)}")
